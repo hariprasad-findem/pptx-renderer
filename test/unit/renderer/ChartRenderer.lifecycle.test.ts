@@ -52,6 +52,107 @@ function buildSimpleChartXml(): string {
   `;
 }
 
+function buildScatterLegendChartXml(): string {
+  return `
+    <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <c:chart>
+        <c:plotArea>
+          <c:scatterChart>
+            <c:scatterStyle val="smoothMarker"/>
+            <c:ser>
+              <c:idx val="0"/><c:order val="0"/>
+              <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Y 值</c:v></c:pt></c:strCache></c:strRef></c:tx>
+              <c:marker><c:symbol val="none"/></c:marker>
+              <c:xVal><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>0.7</c:v></c:pt><c:pt idx="1"><c:v>1.8</c:v></c:pt><c:pt idx="2"><c:v>2.6</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+              <c:yVal><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>2.7</c:v></c:pt><c:pt idx="1"><c:v>3.2</c:v></c:pt><c:pt idx="2"><c:v>0.8</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+              <c:smooth val="1"/>
+            </c:ser>
+            <c:axId val="1"/><c:axId val="2"/>
+          </c:scatterChart>
+          <c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+          <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+        </c:plotArea>
+        <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+      </c:chart>
+    </c:chartSpace>
+  `;
+}
+
+function buildLineLegendChartXml(): string {
+  return `
+    <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <c:chart>
+        <c:plotArea>
+          <c:lineChart>
+            <c:grouping val="standard"/>
+            <c:ser>
+              <c:idx val="0"/><c:order val="0"/>
+              <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>系列 1</c:v></c:pt></c:strCache></c:strRef></c:tx>
+              <c:marker><c:symbol val="none"/></c:marker>
+              <c:spPr>
+                <a:ln w="38100">
+                  <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+                </a:ln>
+              </c:spPr>
+              <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat>
+              <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val>
+            </c:ser>
+            <c:axId val="1"/><c:axId val="2"/>
+          </c:lineChart>
+          <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
+          <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+        </c:plotArea>
+        <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+      </c:chart>
+    </c:chartSpace>
+  `;
+}
+
+function buildBarLegendPaletteChartXml(): string {
+  return `
+    <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                  xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart">
+      <mc:AlternateContent>
+        <mc:Choice Requires="c14"><c14:style val="102"/></mc:Choice>
+        <mc:Fallback><c:style val="2"/></mc:Fallback>
+      </mc:AlternateContent>
+      <c:chart>
+        <c:plotArea>
+          <c:barChart>
+            <c:barDir val="col"/><c:grouping val="clustered"/>
+            <c:ser>
+              <c:idx val="0"/><c:order val="0"/>
+              <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>系列 1</c:v></c:pt></c:strCache></c:strRef></c:tx>
+              <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+              <c:val><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numCache></c:numRef></c:val>
+            </c:ser>
+            <c:ser>
+              <c:idx val="1"/><c:order val="1"/>
+              <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>系列 2</c:v></c:pt></c:strCache></c:strRef></c:tx>
+              <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+              <c:val><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val>
+            </c:ser>
+            <c:ser>
+              <c:idx val="2"/><c:order val="2"/>
+              <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>系列 3</c:v></c:pt></c:strCache></c:strRef></c:tx>
+              <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+              <c:val><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>3</c:v></c:pt></c:numCache></c:numRef></c:val>
+            </c:ser>
+            <c:axId val="1"/><c:axId val="2"/>
+          </c:barChart>
+          <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
+          <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+        </c:plotArea>
+        <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+      </c:chart>
+    </c:chartSpace>
+  `;
+}
+
 function makeChartNode(): ChartNodeData {
   return {
     id: 'chart1',
@@ -168,6 +269,80 @@ describe('ChartRenderer chartInstances lifecycle', () => {
 
     // Should not throw; echarts.init is still called but nothing registered
     expect(mockChartInstance.setOption).toHaveBeenCalled();
+
+    document.body.removeChild(wrapper);
+  });
+
+  it('renders custom side legend overlay and disables echarts legend for right-side scatter legends', () => {
+    const ctx = createMockRenderContext();
+    ctx.presentation.charts = new Map([
+      ['ppt/charts/chart1.xml', parseXml(buildScatterLegendChartXml())],
+    ]);
+
+    const wrapper = renderChart(makeChartNode(), ctx);
+    document.body.appendChild(wrapper);
+
+    const chartDiv = wrapper.querySelector('div') as HTMLElement;
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+
+    for (const cb of rafCallbacks) cb();
+
+    const overlay = wrapper.querySelector('.pptx-chart-custom-legend') as HTMLElement | null;
+    expect(overlay).not.toBeNull();
+    expect(overlay?.textContent).toContain('Y 值');
+
+    const option = mockChartInstance.setOption.mock.calls[0]?.[0] as any;
+    expect(option?.legend?.show).toBe(false);
+
+    document.body.removeChild(wrapper);
+  });
+
+  it('uses series line width for custom line legend icons', () => {
+    const ctx = createMockRenderContext();
+    ctx.presentation.charts = new Map([
+      ['ppt/charts/chart1.xml', parseXml(buildLineLegendChartXml())],
+    ]);
+
+    const wrapper = renderChart(makeChartNode(), ctx);
+    document.body.appendChild(wrapper);
+
+    const chartDiv = wrapper.querySelector('div') as HTMLElement;
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+
+    for (const cb of rafCallbacks) cb();
+
+    const iconPath = wrapper.querySelector('.pptx-chart-custom-legend svg path') as SVGPathElement | null;
+    expect(iconPath).not.toBeNull();
+    expect(iconPath?.getAttribute('stroke-width')).toBe('3');
+
+    document.body.removeChild(wrapper);
+  });
+
+  it('uses chart palette colors for custom bar legend icons when series styles are implicit', () => {
+    const ctx = createMockRenderContext();
+    ctx.presentation.charts = new Map([
+      ['ppt/charts/chart1.xml', parseXml(buildBarLegendPaletteChartXml())],
+    ]);
+
+    const wrapper = renderChart(makeChartNode(), ctx);
+    document.body.appendChild(wrapper);
+
+    const chartDiv = wrapper.querySelector('div') as HTMLElement;
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+
+    for (const cb of rafCallbacks) cb();
+
+    const iconRects = wrapper.querySelectorAll('.pptx-chart-custom-legend svg rect');
+    const option = mockChartInstance.setOption.mock.calls[0]?.[0] as any;
+    const palette = option?.color as string[] | undefined;
+    expect(iconRects).toHaveLength(3);
+    expect(Array.isArray(palette)).toBe(true);
+    expect(iconRects[0]?.getAttribute('fill')).toBe(palette?.[0]);
+    expect(iconRects[1]?.getAttribute('fill')).toBe(palette?.[1]);
+    expect(iconRects[2]?.getAttribute('fill')).toBe(palette?.[2]);
 
     document.body.removeChild(wrapper);
   });

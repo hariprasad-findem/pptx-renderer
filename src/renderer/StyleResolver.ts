@@ -102,6 +102,7 @@ export function resolveColor(
 function resolveColorUncached(
   colorNode: SafeXmlNode,
   ctx: RenderContext,
+  placeholderColorNode?: SafeXmlNode,
 ): { color: string; alpha: number } {
   // Iterate child elements to find the actual color type node
   for (const child of colorNode.allChildren()) {
@@ -116,6 +117,12 @@ function resolveColorUncached(
 
       case 'schemeClr': {
         const scheme = child.attr('val') || 'tx1';
+        if (scheme.toLowerCase() === 'phclr' && placeholderColorNode?.exists()) {
+          const base = resolveColor(placeholderColorNode, ctx);
+          const baseHex = base.color.startsWith('#') ? base.color.slice(1) : base.color;
+          const adjusted = applyColorModifiers(baseHex, modifiers);
+          return { color: adjusted.color, alpha: adjusted.alpha * base.alpha };
+        }
         const hex = resolveSchemeColor(scheme, ctx);
         return applyColorModifiers(hex, modifiers);
       }
@@ -163,6 +170,12 @@ function resolveColorUncached(
   }
   if (selfTag === 'schemeClr') {
     const scheme = colorNode.attr('val') || 'tx1';
+    if (scheme.toLowerCase() === 'phclr' && placeholderColorNode?.exists()) {
+      const base = resolveColor(placeholderColorNode, ctx);
+      const baseHex = base.color.startsWith('#') ? base.color.slice(1) : base.color;
+      const adjusted = applyColorModifiers(baseHex, collectModifiers(colorNode));
+      return { color: adjusted.color, alpha: adjusted.alpha * base.alpha };
+    }
     const hex = resolveSchemeColor(scheme, ctx);
     return applyColorModifiers(hex, collectModifiers(colorNode));
   }
@@ -198,6 +211,15 @@ function colorToCss(color: string, alpha: number): string {
     return hex;
   }
   return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+}
+
+function resolveColorWithPlaceholder(
+  colorNode: SafeXmlNode,
+  ctx: RenderContext,
+  placeholderColorNode?: SafeXmlNode,
+): { color: string; alpha: number } {
+  if (!placeholderColorNode?.exists()) return resolveColor(colorNode, ctx);
+  return resolveColorUncached(colorNode, ctx, placeholderColorNode);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +445,11 @@ function resolvePatternFill(pattFill: SafeXmlNode, ctx: RenderContext): string {
 /**
  * Parse a gradient fill into a CSS gradient string.
  */
-function resolveGradient(gradFill: SafeXmlNode, ctx: RenderContext): string {
+function resolveGradient(
+  gradFill: SafeXmlNode,
+  ctx: RenderContext,
+  placeholderColorNode?: SafeXmlNode,
+): string {
   // Parse gradient stops
   const gsLst = gradFill.child('gsLst');
   const stops: { position: number; color: string }[] = [];
@@ -431,7 +457,7 @@ function resolveGradient(gradFill: SafeXmlNode, ctx: RenderContext): string {
   for (const gs of gsLst.children('gs')) {
     const pos = gs.numAttr('pos') ?? 0;
     const posPercent = pctToDecimal(pos) * 100;
-    const { color, alpha } = resolveColor(gs, ctx);
+    const { color, alpha } = resolveColorWithPlaceholder(gs, ctx, placeholderColorNode);
     stops.push({ position: posPercent, color: colorToCss(color, alpha) });
   }
 
@@ -507,7 +533,7 @@ export function resolveLineStyle(
   ln: SafeXmlNode,
   ctx: RenderContext,
   lnRef?: SafeXmlNode,
-): { width: number; color: string; dash: string } {
+): { width: number; color: string; dash: string; dashKind: string } {
   // Width: a:ln@w is in EMU, convert to px
   const widthEmu = ln.numAttr('w') ?? 0;
   let width = emuToPx(widthEmu);
@@ -565,9 +591,11 @@ export function resolveLineStyle(
 
   // Dash pattern
   let dash = 'solid';
+  let dashKind = 'solid';
   const prstDash = ln.child('prstDash');
   if (prstDash.exists()) {
     const val = prstDash.attr('val') || 'solid';
+    dashKind = val;
     dash = ooxmlDashToCss(val);
   }
 
@@ -578,12 +606,13 @@ export function resolveLineStyle(
       const themeLn = ctx.theme.lineStyles[idx - 1];
       const themeDash = themeLn.child('prstDash');
       if (themeDash.exists()) {
-        dash = ooxmlDashToCss(themeDash.attr('val') || 'solid');
+        dashKind = themeDash.attr('val') || 'solid';
+        dash = ooxmlDashToCss(dashKind);
       }
     }
   }
 
-  return { width, color, dash };
+  return { width, color, dash, dashKind };
 }
 
 /**
@@ -618,6 +647,8 @@ function ooxmlDashToCss(val: string): string {
 export interface GradientFillData {
   type: 'linear' | 'radial';
   stops: Array<{ position: number; color: string }>;
+  /** SVG gradient interpolation space; OOXML gradients visually match linearRGB more closely. */
+  colorInterpolation?: 'linearRGB' | 'sRGB';
   /** OOXML angle in degrees (0 = top-to-bottom). Only relevant for linear gradients. */
   angle: number;
   /** Radial gradient center X as fraction 0–1. Default 0.5. */
@@ -626,6 +657,60 @@ export interface GradientFillData {
   cy?: number;
   /** OOXML path type for radial gradients: 'rect', 'circle', or 'shape'. */
   pathType?: string;
+}
+
+function resolveGradientFillNode(
+  gradFill: SafeXmlNode,
+  ctx: RenderContext,
+  placeholderColorNode?: SafeXmlNode,
+): GradientFillData | null {
+  const gsLst = gradFill.child('gsLst');
+  const stops: Array<{ position: number; color: string }> = [];
+
+  for (const gs of gsLst.children('gs')) {
+    const pos = gs.numAttr('pos') ?? 0;
+    const posPercent = pctToDecimal(pos) * 100;
+    const { color, alpha } = resolveColorWithPlaceholder(gs, ctx, placeholderColorNode);
+    stops.push({ position: posPercent, color: colorToCss(color, alpha) });
+  }
+
+  if (stops.length === 0) return null;
+  stops.sort((a, b) => a.position - b.position);
+
+  const lin = gradFill.child('lin');
+  if (lin.exists()) {
+    const angle = angleToDeg(lin.numAttr('ang') ?? 0);
+    return { type: 'linear', stops, angle, colorInterpolation: 'linearRGB' };
+  }
+
+  const path = gradFill.child('path');
+  if (path.exists()) {
+    const pathType = path.attr('path');
+    if (pathType === 'circle' || pathType === 'shape' || pathType === 'rect') {
+      const ftr = path.child('fillToRect');
+      let cx = 0.5;
+      let cy = 0.5;
+      if (ftr.exists()) {
+        const l = (ftr.numAttr('l') ?? 0) / 100000;
+        const t = (ftr.numAttr('t') ?? 0) / 100000;
+        const r = (ftr.numAttr('r') ?? 0) / 100000;
+        const b = (ftr.numAttr('b') ?? 0) / 100000;
+        cx = (l + (1 - r)) / 2;
+        cy = (t + (1 - b)) / 2;
+      }
+      return {
+        type: 'radial',
+        stops,
+        angle: 0,
+        cx,
+        cy,
+        pathType: pathType,
+        colorInterpolation: 'linearRGB',
+      };
+    }
+  }
+
+  return { type: 'linear', stops, angle: 0, colorInterpolation: 'linearRGB' };
 }
 
 /**
@@ -645,54 +730,44 @@ export function resolveGradientFill(
 
   if (!gradFill.exists()) return null;
 
-  const gsLst = gradFill.child('gsLst');
-  const stops: Array<{ position: number; color: string }> = [];
+  return resolveGradientFillNode(gradFill, ctx);
+}
 
-  for (const gs of gsLst.children('gs')) {
-    const pos = gs.numAttr('pos') ?? 0;
-    const posPercent = pctToDecimal(pos) * 100;
-    const { color, alpha } = resolveColor(gs, ctx);
-    stops.push({ position: posPercent, color: colorToCss(color, alpha) });
+export function resolveThemeFillReference(
+  fillRef: SafeXmlNode,
+  ctx: RenderContext,
+): { fillCss: string; gradientFillData: GradientFillData | null } {
+  const idx = fillRef.numAttr('idx') ?? 0;
+  if (idx <= 0 || (ctx.theme.fillStyles?.length ?? 0) < idx) {
+    return { fillCss: resolveColorToCss(fillRef, ctx), gradientFillData: null };
   }
 
-  if (stops.length === 0) return null;
-  stops.sort((a, b) => a.position - b.position);
-
-  // Determine gradient type
-  const lin = gradFill.child('lin');
-  if (lin.exists()) {
-    const angle = angleToDeg(lin.numAttr('ang') ?? 0);
-    return { type: 'linear', stops, angle };
+  const themeFill = ctx.theme.fillStyles[idx - 1];
+  if (!themeFill?.exists()) {
+    return { fillCss: resolveColorToCss(fillRef, ctx), gradientFillData: null };
   }
 
-  const path = gradFill.child('path');
-  if (path.exists()) {
-    const pathType = path.attr('path');
-    if (pathType === 'circle' || pathType === 'shape' || pathType === 'rect') {
-      // fillToRect defines the rectangle the gradient path fills to.
-      // Each attribute (l/t/r/b) is an inset percentage (100000 = 100%) from that edge.
-      // The gradient center is at the center of the resulting rectangle.
-      const ftr = path.child('fillToRect');
-      let cx = 0.5;
-      let cy = 0.5;
-      if (ftr.exists()) {
-        const l = (ftr.numAttr('l') ?? 0) / 100000;
-        const t = (ftr.numAttr('t') ?? 0) / 100000;
-        const r = (ftr.numAttr('r') ?? 0) / 100000;
-        const b = (ftr.numAttr('b') ?? 0) / 100000;
-        // l insets from left, r insets from right → rect spans [l, 1-r]
-        cx = (l + (1 - r)) / 2;
-        cy = (t + (1 - b)) / 2;
-      }
-      // OOXML path gradients: stop pos=0 = fillToRect center, pos=100000 = shape edge.
-      // SVG radialGradient: offset 0% = center, 100% = edge.
-      // Conventions match — no reversal needed.
-      return { type: 'radial', stops, angle: 0, cx, cy, pathType: pathType };
-    }
+  if (themeFill.localName === 'solidFill') {
+    const resolved = resolveColorWithPlaceholder(themeFill, ctx, fillRef);
+    return { fillCss: colorToCss(resolved.color, resolved.alpha), gradientFillData: null };
   }
 
-  // Default to linear top-to-bottom (angle 0 in OOXML = top-to-bottom)
-  return { type: 'linear', stops, angle: 0 };
+  if (themeFill.localName === 'gradFill') {
+    return {
+      fillCss: resolveGradient(themeFill, ctx, fillRef),
+      gradientFillData: resolveGradientFillNode(themeFill, ctx, fillRef),
+    };
+  }
+
+  if (themeFill.localName === 'pattFill') {
+    return { fillCss: resolvePatternFill(themeFill, ctx), gradientFillData: null };
+  }
+
+  if (themeFill.localName === 'noFill') {
+    return { fillCss: 'transparent', gradientFillData: null };
+  }
+
+  return { fillCss: resolveColorToCss(fillRef, ctx), gradientFillData: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +778,7 @@ export interface GradientStrokeData {
   stops: Array<{ position: number; color: string }>;
   angle: number;
   width: number;
+  colorInterpolation?: 'linearRGB' | 'sRGB';
 }
 
 /**
@@ -741,5 +817,5 @@ export function resolveGradientStroke(
   // OOXML default when w is omitted is typically 1 pt; avoid invisible gradient stroke
   if (width <= 0) width = 1;
 
-  return { stops, angle, width };
+  return { stops, angle, width, colorInterpolation: 'linearRGB' };
 }

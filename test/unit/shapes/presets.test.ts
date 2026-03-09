@@ -1139,6 +1139,128 @@ describe('bulk coverage — untested single-path presets', () => {
     expect(d.length).toBeGreaterThan(0);
     expect(d).toContain('M');
   });
+
+  it('renders cloud as a single main outline without internal detail paths', () => {
+    const parts = getMultiPathPreset('cloud', 400, 280);
+    expect(parts).toBeNull();
+  });
+
+  it('renders foldedCorner as a clipped body plus fold triangle and crease line', () => {
+    const parts = getMultiPathPreset('foldedCorner', 400, 280, new Map([['adj', 40000]]));
+    expect(parts).not.toBeNull();
+    expect(parts!).toHaveLength(3);
+    expect(parts![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(parts![0].d).toBe('M0,0 L400,0 L400,201.60000000000002 L321.6,280 L0,280 Z');
+    expect(parts![1]).toMatchObject({ fill: 'darkenLess', stroke: false });
+    expect(parts![1].d).toBe('M321.6,280 L321.6,201.60000000000002 L400,201.60000000000002 Z');
+    expect(parts![2]).toMatchObject({ fill: 'none', stroke: true });
+    expect(parts![2].d).toBe('M321.6,280 L321.6,201.60000000000002');
+  });
+
+});
+
+describe('curved arrow symmetry', () => {
+  function mirrorAbsolutePathHorizontally(path: string, width: number): string {
+    const tokens = path.match(/[MLAZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
+    if (!tokens) return path;
+    const out: string[] = [];
+    let i = 0;
+    while (i < tokens.length) {
+      const cmd = tokens[i++];
+      if (!cmd) break;
+      out.push(cmd);
+      if (cmd === 'Z') continue;
+      if (cmd === 'M' || cmd === 'L') {
+        const x = Number(tokens[i++]);
+        const y = Number(tokens[i++]);
+        out.push(String(width - x), String(y));
+        continue;
+      }
+      if (cmd === 'A') {
+        const rx = tokens[i++];
+        const ry = tokens[i++];
+        const rot = tokens[i++];
+        const largeArc = tokens[i++];
+        const sweep = Number(tokens[i++]);
+        const x = Number(tokens[i++]);
+        const y = Number(tokens[i++]);
+        out.push(rx, ry, rot, largeArc, String(sweep ? 0 : 1), String(width - x), String(y));
+      }
+    }
+    return out.join(' ');
+  }
+
+  it('renders curvedLeftArrow as the horizontal mirror of curvedRightArrow', () => {
+    const adjustments = new Map<string, number>([
+      ['adj1', 25000],
+      ['adj2', 50000],
+      ['adj3', 25000],
+    ]);
+    const w = 400;
+    const h = 280;
+    const right = getPresetShapePath('curvedRightArrow', w, h, adjustments);
+    const left = getPresetShapePath('curvedLeftArrow', w, h, adjustments);
+    expect(left).toBe(mirrorAbsolutePathHorizontally(right, w));
+  });
+
+  it('renders curved arrows with a separate tail contour to avoid seam crossing', () => {
+    const adjustments = new Map<string, number>([
+      ['adj1', 25000],
+      ['adj2', 50000],
+      ['adj3', 25000],
+    ]);
+    const right = getPresetShapePath('curvedRightArrow', 400, 280, adjustments);
+    const left = getPresetShapePath('curvedLeftArrow', 400, 280, adjustments);
+
+    expect((right.match(/\bM/g) ?? []).length).toBe(2);
+    expect((left.match(/\bM/g) ?? []).length).toBe(2);
+  });
+
+  it('renders curved arrows as two filled layers with shape-specific front/back ordering', () => {
+    const right = getMultiPathPreset('curvedRightArrow', 400, 280);
+    const left = getMultiPathPreset('curvedLeftArrow', 400, 280);
+
+    expect(right).not.toBeNull();
+    expect(left).not.toBeNull();
+    expect(right).toHaveLength(2);
+    expect(left).toHaveLength(2);
+
+    expect(right![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(right![1]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(left![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(left![1]).toMatchObject({ fill: 'norm', stroke: true });
+
+    // Right arrow: back/top band is painted first, front/lower arrow band second.
+    expect(right![0].d).not.toMatch(/L\s*400(?:,|\s)\s*210\b/);
+    expect(right![1].d).toMatch(/L\s*400(?:,|\s)\s*210\b/);
+
+    // Left arrow: back/lower arrow band is painted first, front/top band second.
+    expect(left![0].d).toMatch(/L\s*0(?:,|\s)\s*210\b/);
+    expect(left![1].d).not.toMatch(/L\s*0(?:,|\s)\s*210\b/);
+  });
+
+  it('renders curvedUpArrow and curvedDownArrow as layered bands so the overlap is painted by order', () => {
+    const up = getMultiPathPreset('curvedUpArrow', 400, 280);
+    const down = getMultiPathPreset('curvedDownArrow', 400, 280);
+
+    expect(up).not.toBeNull();
+    expect(down).not.toBeNull();
+    expect(up).toHaveLength(2);
+    expect(down).toHaveLength(2);
+
+    expect(up![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(up![1]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(down![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(down![1]).toMatchObject({ fill: 'norm', stroke: true });
+
+    // Up arrow: front/right band with the arrowhead should be painted first.
+    expect(up![0].d).toMatch(/[ML]\s*330(?:,|\s)\s*0\b/);
+    expect(up![1].d).not.toMatch(/[ML]\s*330(?:,|\s)\s*0\b/);
+
+    // Down arrow: front/right band with the arrowhead should be painted second.
+    expect(down![0].d).not.toMatch(/[ML]\s*330(?:,|\s)\s*280\b/);
+    expect(down![1].d).toMatch(/[ML]\s*330(?:,|\s)\s*280\b/);
+  });
 });
 
 describe('bulk coverage — untested multi-path presets', () => {
@@ -1166,6 +1288,14 @@ describe('bulk coverage — untested multi-path presets', () => {
       expect(typeof p.fill).toBe('string');
       expect(typeof p.stroke).toBe('boolean');
     }
+  });
+
+  it('treats actionButtonForward as an alias of actionButtonForwardNext', () => {
+    const forward = getMultiPathPreset('actionButtonForward', 400, 280);
+    const forwardNext = getMultiPathPreset('actionButtonForwardNext', 400, 280);
+    expect(forward).not.toBeNull();
+    expect(forwardNext).not.toBeNull();
+    expect(forward).toEqual(forwardNext);
   });
 });
 

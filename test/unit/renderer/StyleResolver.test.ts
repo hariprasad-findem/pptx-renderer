@@ -390,6 +390,15 @@ describe('resolveLineStyle', () => {
       expect(result.dash).toBe('dashed');
     });
 
+    it('preserves the original OOXML dash kind for downstream SVG rendering', () => {
+      const ctx = createMockRenderContext();
+      const node = xmlNode(
+        `<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill><prstDash val="dashDot"/></ln>`,
+      );
+      const result = resolveLineStyle(node, ctx);
+      expect(result.dashKind).toBe('dashDot');
+    });
+
     it('resolves unknown dash value to solid', () => {
       const ctx = createMockRenderContext();
       const node = xmlNode(

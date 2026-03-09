@@ -107,6 +107,24 @@ Report (default):
 
 - `test/e2e/reports/oracle-failures/full-ground-truth-one-shot.json`
 
+## Python-pptx Ground Truth Pipeline
+
+A second pipeline using `python-pptx` for PPTX creation and PowerPoint COM for PDF/PNG export. Generates 100 cases under `oracle/cases-pypptx/` with `oracle-pypptx-*` prefix, covering:
+
+- **Text** (38 cases): fonts, sizes, styles, alignment, colors, bullets, vertical text, line spacing
+- **Shape adjustments** (31 cases): adjustment handles for roundRect, chevron, arrow, star, donut, cross, trapezoid, blockArc, bevel, triangle, pentagon, can, heart, moon, brace
+- **Composites** (10 cases): multi-element layouts combining shapes, text, tables, and charts
+- **Charts** (21 cases): column, bar, line, pie, doughnut, area, scatter, radar, bubble variants
+
+Generate cases:
+
+```bash
+cd test/e2e
+.venv/bin/python3 scripts/generate_pypptx_cases.py
+```
+
+Each case uses an independent COM session for fault isolation.
+
 ## Local Development Loop (Incremental by default)
 
 Use this when actively improving shape/SmartArt support.

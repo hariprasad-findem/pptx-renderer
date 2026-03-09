@@ -3,6 +3,7 @@ import { parseXml } from '../../../src/parser/XmlParser';
 import { parseShapeNode } from '../../../src/model/nodes/ShapeNode';
 import { renderShape } from '../../../src/renderer/ShapeRenderer';
 import { createMockRenderContext } from '../helpers/mockContext';
+import { applyColorModifiers, applyTint, hexToRgb, rgbToHex } from '../../../src/utils/color';
 
 function buildLineShapeXml(): string {
   return `
@@ -26,6 +27,20 @@ function buildLineShapeXml(): string {
       </p:spPr>
     </p:sp>
   `;
+}
+
+function mixHex(base: string, target: string, t: number): string {
+  const b = hexToRgb(base);
+  const dst = hexToRgb(target);
+  return rgbToHex(
+    b.r + (dst.r - b.r) * t,
+    b.g + (dst.g - b.g) * t,
+    b.b + (dst.b - b.b) * t,
+  );
+}
+
+function extractPathNumbers(path: string): number[] {
+  return (path.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
 }
 
 describe('ShapeRenderer', () => {
@@ -165,6 +180,180 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('fill')).toBe('#4472C4');
     // circularArrow should have no stroke
     expect(path?.getAttribute('stroke')).toBe('none');
+  });
+
+  it('renders fillRef theme gradient using phClr from fillRef color (windows pypptx shape adj)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="Rounded Rectangle 1"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1828800" y="914400"/><a:ext cx="4572000" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 5000"/></a:avLst></a:prstGeom>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>
+        </p:style>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const themeFill = parseXml(`
+      <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+        <a:gsLst>
+          <a:gs pos="0">
+            <a:schemeClr val="phClr">
+              <a:tint val="100000"/>
+              <a:shade val="100000"/>
+              <a:satMod val="130000"/>
+            </a:schemeClr>
+          </a:gs>
+          <a:gs pos="100000">
+            <a:schemeClr val="phClr">
+              <a:tint val="50000"/>
+              <a:shade val="100000"/>
+              <a:satMod val="350000"/>
+            </a:schemeClr>
+          </a:gs>
+        </a:gsLst>
+        <a:lin ang="16200000" scaled="0"/>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        fillStyles: [parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), themeFill],
+      },
+    });
+
+    const el = renderShape(shapeNode, ctx);
+    const path = el.querySelector('path');
+    const stops = Array.from(el.querySelectorAll('linearGradient stop'));
+    const expectedStart = applyColorModifiers('4472C4', [
+      { name: 'tint', val: 100000 },
+      { name: 'shade', val: 100000 },
+      { name: 'satMod', val: 130000 },
+    ]);
+    const expectedEnd = applyColorModifiers('4472C4', [
+      { name: 'tint', val: 50000 },
+      { name: 'shade', val: 100000 },
+      { name: 'satMod', val: 350000 },
+    ]);
+
+    expect(path?.getAttribute('fill')).toMatch(/^url\(#grad-fill-/);
+    expect(stops).toHaveLength(2);
+    expect(stops[0]?.getAttribute('stop-color')).toBe(expectedStart.color);
+    expect(stops[1]?.getAttribute('stop-color')).toBe(expectedEnd.color);
+  });
+
+  it('keeps multi-path bevel shading anchored to fillRef base color when main fill is gradient', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="Bevel 1"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1828800" y="914400"/><a:ext cx="4572000" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="bevel"><a:avLst><a:gd name="adj" fmla="val 35000"/></a:avLst></a:prstGeom>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef>
+        </p:style>
+      </p:sp>
+    `;
+    const themeFill = parseXml(`
+      <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+        <a:gsLst>
+          <a:gs pos="0"><a:schemeClr val="phClr"/></a:gs>
+          <a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs>
+        </a:gsLst>
+        <a:lin ang="16200000" scaled="0"/>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        fillStyles: [parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), themeFill],
+      },
+    });
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const paths = el.querySelectorAll('path');
+
+    expect(paths[0]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-/);
+    expect(paths[1]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
+    expect(paths[2]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
+    expect(paths[3]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
+    expect(paths[4]?.getAttribute('fill')).toBe(mixHex('#4472C4', '#ffffff', 0.3));
+  });
+
+  it('derives a tinted gradient for can top face when fillRef resolves to a theme gradient', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="Can 1"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1828800" y="914400"/><a:ext cx="4572000" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="can"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef>
+        </p:style>
+      </p:sp>
+    `;
+    const themeFill = parseXml(`
+      <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+        <a:gsLst>
+          <a:gs pos="0">
+            <a:schemeClr val="phClr">
+              <a:tint val="100000"/>
+              <a:shade val="100000"/>
+              <a:satMod val="130000"/>
+            </a:schemeClr>
+          </a:gs>
+          <a:gs pos="100000">
+            <a:schemeClr val="phClr">
+              <a:tint val="50000"/>
+              <a:shade val="100000"/>
+              <a:satMod val="350000"/>
+            </a:schemeClr>
+          </a:gs>
+        </a:gsLst>
+        <a:lin ang="16200000" scaled="0"/>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        fillStyles: [
+          parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'),
+          parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'),
+          themeFill,
+        ],
+      },
+    });
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const paths = el.querySelectorAll('path');
+    const faceStops = Array.from(el.querySelectorAll('linearGradient[id^="grad-fill-face-"] stop'));
+    expect(paths[0]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-/);
+    expect(paths[1]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-face-/);
+    expect(faceStops[0]?.getAttribute('stop-color')).toBe(applyTint('#316dd7', 65000));
   });
 
   it('renders actionButtonBackPrevious as multi-path with darken sub-paths (oracle-full-shapeid-0129)', () => {
@@ -484,6 +673,31 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('stroke-dasharray')).toBeTruthy();
   });
 
+  it('renders dashDot and lgDashDotDot with distinct SVG dash arrays', () => {
+    const makeShape = (dash: string) => parseShapeNode(parseXml(`
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="54" name="${dash}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:prstDash val="${dash}"/></a:ln>
+        </p:spPr>
+      </p:sp>
+    `));
+
+    const ctx = createMockRenderContext();
+    const dashDotPath = renderShape(makeShape('dashDot'), ctx).querySelector('path');
+    const lgDashDotDotPath = renderShape(makeShape('lgDashDotDot'), ctx).querySelector('path');
+
+    expect(dashDotPath?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(lgDashDotDotPath?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(dashDotPath?.getAttribute('stroke-dasharray')).not.toBe(
+      lgDashDotDotPath?.getAttribute('stroke-dasharray'),
+    );
+  });
+
   it('renders schemeClr fill resolving to theme color', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -523,6 +737,36 @@ describe('ShapeRenderer', () => {
     const el = renderShape(shapeNode, createMockRenderContext());
     const path = el.querySelector('path');
     expect(path).toBeTruthy();
+    expect(path?.getAttribute('stroke')).not.toBe('none');
+  });
+
+  it('renders curved connector presets as stroke-only paths', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="155" name="Curved Connector"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="5080000" cy="3810000"/></a:xfrm>
+          <a:prstGeom prst="curvedConnector3"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill></a:ln>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="2"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="0"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="1"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="tx1"/></a:fontRef>
+        </p:style>
+      </p:cxnSp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const path = el.querySelector('path');
+    expect(path).toBeTruthy();
+    expect(path?.getAttribute('fill')).toBe('none');
     expect(path?.getAttribute('stroke')).not.toBe('none');
   });
 
@@ -720,6 +964,7 @@ describe('ShapeRenderer', () => {
     const linearGrad = defs?.querySelector('linearGradient');
     expect(linearGrad).toBeTruthy();
     expect(linearGrad?.children.length).toBeGreaterThanOrEqual(2);
+    expect(linearGrad?.getAttribute('color-interpolation')).toBe('linearRGB');
   });
 
   it('renders radial gradient fill on shape', () => {
@@ -775,6 +1020,9 @@ describe('ShapeRenderer', () => {
     // Should have two linear gradients (H and V) for rect path
     const linearGrads = Array.from(defs?.querySelectorAll('linearGradient') ?? []);
     expect(linearGrads.length).toBeGreaterThanOrEqual(2);
+    expect(linearGrads.every((grad) => grad.getAttribute('color-interpolation') === 'linearRGB')).toBe(
+      true,
+    );
     // Should have blend group with lighten somewhere in the SVG
     const blendGroup = svg?.querySelector('g[style*="isolation"]');
     expect(blendGroup).toBeTruthy();
@@ -809,6 +1057,8 @@ describe('ShapeRenderer', () => {
     // Should have gradient for stroke
     const stroke = path?.getAttribute('stroke') ?? '';
     expect(stroke).toContain('url(#');
+    const linearGrad = defs?.querySelector('linearGradient');
+    expect(linearGrad?.getAttribute('color-interpolation')).toBe('linearRGB');
   });
 
   it('renders shape with blipFill (image fill) creates clipped image', () => {
@@ -871,6 +1121,132 @@ describe('ShapeRenderer', () => {
     const paths = el.querySelectorAll('path');
     // Multi-path: main body + top ellipse
     expect(paths.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders cloud without internal detail paths', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="209" name="Cloud"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4000000" cy="2800000"/></a:xfrm>
+          <a:prstGeom prst="cloud"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="156082"/></a:solidFill>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="0B2531"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const svgPaths = Array.from(el.querySelectorAll('svg > path'));
+    expect(svgPaths.length).toBe(1);
+  });
+
+  it('renders foldedCorner with a clipped outer corner, fold-face, and vertical crease line', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="210" name="FoldedCorner"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4000000" cy="2800000"/></a:xfrm>
+          <a:prstGeom prst="foldedCorner"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4F81BD"/></a:solidFill>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="3B5F8A"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const svgPaths = Array.from(el.querySelectorAll('svg > path'));
+    expect(svgPaths.length).toBeGreaterThanOrEqual(3);
+    const mainFill = svgPaths[0]?.getAttribute('fill');
+    const foldFill = svgPaths[1]?.getAttribute('fill');
+    const mainPath = svgPaths[0]?.getAttribute('d') ?? '';
+    const foldPath = svgPaths[1]?.getAttribute('d') ?? '';
+    const creasePath = svgPaths[2]?.getAttribute('d') ?? '';
+    expect(extractPathNumbers(mainPath)).toEqual([
+      0,
+      0,
+      419.9475065616798,
+      0,
+      419.9475065616798,
+      211.65354330708664,
+      337.6377952755906,
+      293.96325459317586,
+      0,
+      293.96325459317586,
+    ].map((n) => expect.closeTo(n, 10)));
+    expect(extractPathNumbers(foldPath)).toEqual([
+      337.6377952755906,
+      293.96325459317586,
+      337.6377952755906,
+      211.65354330708664,
+      419.9475065616798,
+      211.65354330708664,
+    ].map((n) => expect.closeTo(n, 10)));
+    expect(extractPathNumbers(creasePath)).toEqual([
+      337.6377952755906,
+      293.96325459317586,
+      337.6377952755906,
+      211.65354330708664,
+    ].map((n) => expect.closeTo(n, 10)));
+    expect(mainFill).toBeTruthy();
+    expect(foldFill).toBeTruthy();
+    expect(foldFill).not.toBe(mainFill);
+    expect(svgPaths[1]?.getAttribute('stroke')).toBe('none');
+    expect(svgPaths[2]?.getAttribute('fill')).toBe('none');
+    expect(svgPaths[2]?.getAttribute('stroke')).not.toBe('none');
+  });
+
+  it('keeps foldedCorner fold-face on a darkened gradient when main fill is theme gradient', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="211" name="FoldedCornerTheme"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4000000" cy="2800000"/></a:xfrm>
+          <a:prstGeom prst="foldedCorner"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>
+        </p:style>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        colorScheme: new Map([['accent1', '4F81BD']]),
+        fillStyles: [
+          parseXml(`<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`),
+          parseXml(`
+            <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="100000"/></a:schemeClr></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="100000"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:lin ang="16200000" scaled="0"/>
+            </a:gradFill>
+          `),
+          parseXml(`
+            <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="100000"/></a:schemeClr></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="100000"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:lin ang="16200000" scaled="0"/>
+            </a:gradFill>
+          `),
+        ],
+      },
+    });
+    const el = renderShape(shapeNode, ctx);
+    const svgPaths = Array.from(el.querySelectorAll('svg > path'));
+    const foldFill = svgPaths[1]?.getAttribute('fill') || '';
+    expect(foldFill.startsWith('url(#')).toBe(true);
   });
 
   it('renders multi-path action button with darkened sub-paths', () => {

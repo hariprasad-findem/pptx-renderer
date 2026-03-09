@@ -925,6 +925,17 @@ describe('renderTable', () => {
       expect(td.style.verticalAlign).toBe('top');
     });
 
+    it('applyCellProperties: missing anchor defaults to top vertical alignment', () => {
+      const tcPrXml = parseXml('<tcPr/>');
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+      const td = el.querySelector('td')!;
+      expect(td.style.verticalAlign).toBe('top');
+    });
+
     // -----------------------------------------------------------------------
     // applyBorder — noFill clears existing border
     // -----------------------------------------------------------------------

@@ -89,11 +89,15 @@ async def _eval_one(
     sem: asyncio.Semaphore,
     api_base: str,
     case: str,
+    source: str | None = None,
 ) -> tuple[dict | None, dict | None]:
     """Evaluate a single case. Returns (result, error) — exactly one is non-None."""
     async with sem:
         try:
-            r = await client.post(f"{api_base}/api/evaluate/{case}")
+            url = f"{api_base}/api/evaluate/{case}"
+            if source:
+                url += f"?source={source}"
+            r = await client.post(url)
             if r.status_code == 404:
                 return None, {"case": case, "error": "not found (no .pptx+.pdf in testdata)"}
             r.raise_for_status()
@@ -111,12 +115,13 @@ async def _eval_batch(
     api_base: str,
     cases: list[str],
     label: str,
+    source: str | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Evaluate a batch of cases concurrently. Returns (results, errors)."""
     if not cases:
         return [], []
     print(f"{label}: evaluating {len(cases)} cases (concurrency={sem._value})...", file=sys.stderr)
-    tasks = [_eval_one(client, sem, api_base, c) for c in cases]
+    tasks = [_eval_one(client, sem, api_base, c, source=source) for c in cases]
     outcomes = await asyncio.gather(*tasks)
     results = []
     errors = []
@@ -134,6 +139,7 @@ async def async_main(args: argparse.Namespace) -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concurrency = args.concurrency
+    source = args.source
 
     results: list[dict] = []
     errors: list[dict] = []
@@ -192,8 +198,20 @@ async def async_main(args: argparse.Namespace) -> int:
                 print(f"Cases dir: not a directory: {cases_dir}", file=sys.stderr)
             else:
                 already_seen = set(shape_cases_to_eval) | set(smartart_cases_to_eval)
-                all_case_jsons = sorted(cases_dir.glob("oracle-full-*.json"))
+                all_case_jsons = sorted(cases_dir.glob("oracle-*.json"))
                 extra_cases_to_eval = [p.stem for p in all_case_jsons if p.stem not in already_seen]
+
+        # --- pypptx cases (separate dir) ---
+        if args.pypptx_cases_dir:
+            pypptx_dir = Path(args.pypptx_cases_dir)
+            if not pypptx_dir.is_absolute():
+                pypptx_dir = (E2E_DIR / pypptx_dir).resolve()
+            if not pypptx_dir.is_dir():
+                print(f"pypptx cases dir: not a directory: {pypptx_dir}", file=sys.stderr)
+            else:
+                already_seen = set(shape_cases_to_eval) | set(smartart_cases_to_eval) | set(extra_cases_to_eval)
+                pypptx_jsons = sorted(pypptx_dir.glob("oracle-pypptx-*.json"))
+                extra_cases_to_eval.extend(p.stem for p in pypptx_jsons if p.stem not in already_seen)
 
         # --- Evaluate all concurrently ---
         all_cases = shape_cases_to_eval + smartart_cases_to_eval + extra_cases_to_eval
@@ -202,7 +220,7 @@ async def async_main(args: argparse.Namespace) -> int:
                   f"smartart={len(smartart_cases_to_eval)}, other={len(extra_cases_to_eval)}), "
                   f"concurrency={concurrency}", file=sys.stderr)
             batch_results, batch_errors = await _eval_batch(
-                client, sem, api_base, all_cases, "All cases",
+                client, sem, api_base, all_cases, "All cases", source=source,
             )
             results.extend(batch_results)
             errors.extend(batch_errors)
@@ -210,7 +228,8 @@ async def async_main(args: argparse.Namespace) -> int:
         # --- Fallback: evaluate-all endpoint ---
         if not all_cases:
             try:
-                r = await client.get(f"{api_base}/api/testdata-files")
+                src_qs = f"?source={source}" if source else ""
+                r = await client.get(f"{api_base}/api/testdata-files{src_qs}")
                 r.raise_for_status()
                 test_files = r.json()
             except Exception as e:
@@ -223,7 +242,7 @@ async def async_main(args: argparse.Namespace) -> int:
             else:
                 print(f"Evaluating {len(test_files)} cases via POST /api/evaluate-all...", file=sys.stderr)
                 try:
-                    r = await client.post(f"{api_base}/api/evaluate-all")
+                    r = await client.post(f"{api_base}/api/evaluate-all{src_qs}")
                     r.raise_for_status()
                     body = r.json()
                 except Exception as e:
@@ -243,7 +262,11 @@ async def async_main(args: argparse.Namespace) -> int:
     table_results = [r for r in results if "table" in r["case"].lower()]
     connector_results = [r for r in results if "connector" in r["case"].lower()]
     fillstroke_results = [r for r in results if "fillstroke" in r["case"].lower()]
-    if not shape_results and not smartart_results and not chart_results and not table_results and not connector_results and not fillstroke_results:
+    text_results = [r for r in results if "-text-" in r["case"].lower()]
+    shape_adj_results = [r for r in results if "shape-adj" in r["case"].lower()]
+    composite_results = [r for r in results if "composite" in r["case"].lower()]
+    pypptx_results = [r for r in results if "oracle-pypptx-" in r["case"].lower()]
+    if not shape_results and not smartart_results and not chart_results and not table_results and not connector_results and not fillstroke_results and not pypptx_results:
         shape_results = results
         smartart_results = []
 
@@ -258,6 +281,10 @@ async def async_main(args: argparse.Namespace) -> int:
         "table_cases": len(table_results),
         "connector_cases": len(connector_results),
         "fillstroke_cases": len(fillstroke_results),
+        "text_cases": len(text_results),
+        "shape_adj_cases": len(shape_adj_results),
+        "composite_cases": len(composite_results),
+        "pypptx_cases": len(pypptx_results),
         "errors": errors,
         "results": results,
     }
@@ -332,6 +359,20 @@ def main() -> int:
         metavar="DIR",
         help="Scan all oracle-full-*.json in DIR and POST /api/evaluate/{stem} for each. "
         "Subsumes --smartart-cases-dir and covers charts, tables, connectors, etc.",
+    )
+    parser.add_argument(
+        "--pypptx-cases-dir",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Scan oracle-pypptx-*.json in DIR and POST /api/evaluate/{stem} for each.",
+    )
+    parser.add_argument(
+        "--source",
+        type=str,
+        default=None,
+        metavar="SOURCE",
+        help="Testdata source: 'windows' for testdata/windows-cases/, omit for testdata/cases/.",
     )
     parser.add_argument(
         "--concurrency",

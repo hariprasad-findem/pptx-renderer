@@ -573,14 +573,12 @@ function applyCellProperties(td: HTMLElement, cell: TableCell, ctx: RenderContex
 
   // Vertical alignment
   const anchor = tcPr.attr('anchor');
-  if (anchor) {
-    const alignMap: Record<string, string> = {
-      t: 'top',
-      ctr: 'middle',
-      b: 'bottom',
-    };
-    td.style.verticalAlign = alignMap[anchor] || 'top';
-  }
+  const alignMap: Record<string, string> = {
+    t: 'top',
+    ctr: 'middle',
+    b: 'bottom',
+  };
+  td.style.verticalAlign = alignMap[anchor || 't'] || 'top';
 }
 
 /**

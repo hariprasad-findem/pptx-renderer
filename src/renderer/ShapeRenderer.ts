@@ -21,6 +21,7 @@ import {
   resolveGradientFill,
   resolveColorToCss,
   resolveColor,
+  resolveThemeFillReference,
 } from './StyleResolver';
 import { renderTextBody } from './TextRenderer';
 import { renderCustomGeometry } from '../shapes/customGeometry';
@@ -31,7 +32,7 @@ import {
   PresetSubPath,
 } from '../shapes/presets';
 import { emuToPx } from '../parser/units';
-import { hexToRgb, rgbToHex } from '../utils/color';
+import { applyTint, hexToRgb, rgbToHex } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalUrl } from '../utils/urlSafety';
@@ -59,6 +60,30 @@ function resolveShapeBlipUrl(blipFill: SafeXmlNode, ctx: RenderContext): string 
 
 let markerIdCounter = 0;
 let gradientIdCounter = 0;
+
+function svgDashArrayForKind(dashKind: string, strokeWidth: number): string | null {
+  const w = Math.max(strokeWidth, 1);
+  switch (dashKind) {
+    case 'dot':
+    case 'sysDot':
+      return `${w},${w * 2}`;
+    case 'dash':
+    case 'sysDash':
+      return `${w * 4},${w * 2}`;
+    case 'lgDash':
+      return `${w * 8},${w * 3}`;
+    case 'dashDot':
+    case 'sysDashDot':
+      return `${w * 4},${w * 2},${w},${w * 2}`;
+    case 'lgDashDot':
+      return `${w * 8},${w * 3},${w},${w * 3}`;
+    case 'lgDashDotDot':
+    case 'sysDashDotDot':
+      return `${w * 8},${w * 3},${w},${w * 2},${w},${w * 2}`;
+    default:
+      return null;
+  }
+}
 
 function parseCssColorToRgb(color: string): { r: number; g: number; b: number } | null {
   if (!color) return null;
@@ -367,7 +392,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   const spPr = node.source.child('spPr');
   let fillCss = '';
   // Resolve structured gradient fill data (for SVG gradient elements)
-  const gradientFillData = node.fill ? resolveGradientFill(spPr, ctx) : null;
+  let gradientFillData = node.fill ? resolveGradientFill(spPr, ctx) : null;
   if (node.fill && node.fill.exists()) {
     if (node.fill.localName === 'solidFill') {
       const colorChild = node.fill.child('srgbClr').exists()
@@ -401,15 +426,21 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   }
   // fillRef fallback: when no explicit fill but fillRef idx > 0, use fillRef color
   if (!fillCss && fillRef && fillRef.exists()) {
-    const idx = fillRef.numAttr('idx') ?? 0;
-    if (idx > 0) {
-      fillCss = resolveColorToCss(fillRef, ctx);
-    }
+    const resolvedThemeFill = resolveThemeFillReference(fillRef, ctx);
+    fillCss = resolvedThemeFill.fillCss;
+    if (!gradientFillData) gradientFillData = resolvedThemeFill.gradientFillData;
+  }
+  // Connectors and other line-like presets are stroke-only in OOXML. They may still
+  // carry style fillRefs, but those must not become filled ribbons in SVG.
+  if (isLineLike) {
+    fillCss = '';
+    gradientFillData = null;
   }
 
   let strokeColor = 'none';
   let strokeWidth = 0;
   let strokeDash = '';
+  let strokeDashKind = 'solid';
   let strokeLinecap = '';
   let strokeLinejoin = '';
   let gradientStroke: ReturnType<typeof resolveGradientStroke> = null;
@@ -436,6 +467,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       strokeColor = lineStyle.color;
       strokeWidth = lineStyle.width;
       strokeDash = lineStyle.dash;
+      strokeDashKind = lineStyle.dashKind;
     }
 
     // Line cap: a:ln@cap → SVG stroke-linecap
@@ -568,6 +600,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             const hGradId = `${fillGradId}-h`;
             const hGrad = document.createElementNS(svgNs, 'linearGradient');
             hGrad.setAttribute('id', hGradId);
+            hGrad.setAttribute(
+              'color-interpolation',
+              gradientFillData.colorInterpolation ?? 'linearRGB',
+            );
             hGrad.setAttribute('x1', '0%');
             hGrad.setAttribute('y1', '0%');
             hGrad.setAttribute('x2', '100%');
@@ -584,6 +620,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             const vGradId = `${fillGradId}-v`;
             const vGrad = document.createElementNS(svgNs, 'linearGradient');
             vGrad.setAttribute('id', vGradId);
+            vGrad.setAttribute(
+              'color-interpolation',
+              gradientFillData.colorInterpolation ?? 'linearRGB',
+            );
             vGrad.setAttribute('x1', '0%');
             vGrad.setAttribute('y1', '0%');
             vGrad.setAttribute('x2', '0%');
@@ -638,15 +678,20 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           } else if (gradientFillData.type === 'radial') {
             const radialGrad = document.createElementNS(svgNs, 'radialGradient');
             radialGrad.setAttribute('id', fillGradId);
+            radialGrad.setAttribute(
+              'color-interpolation',
+              gradientFillData.colorInterpolation ?? 'linearRGB',
+            );
+            radialGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
             const gcx = gradientFillData.cx ?? 0.5;
             const gcy = gradientFillData.cy ?? 0.5;
-            radialGrad.setAttribute('cx', `${gcx * 100}%`);
-            radialGrad.setAttribute('cy', `${gcy * 100}%`);
+            radialGrad.setAttribute('cx', String(gcx * svgW));
+            radialGrad.setAttribute('cy', String(gcy * svgH));
             // path="circle"/"shape": gradient reaches farthest corner
             const maxDx = Math.max(gcx, 1 - gcx);
             const maxDy = Math.max(gcy, 1 - gcy);
             const r = Math.sqrt(maxDx * maxDx + maxDy * maxDy);
-            radialGrad.setAttribute('r', `${r * 100}%`);
+            radialGrad.setAttribute('r', String(r * Math.max(svgW, svgH)));
             for (const stop of gradientFillData.stops) {
               const svgStop = document.createElementNS(svgNs, 'stop');
               svgStop.setAttribute('offset', `${stop.position}%`);
@@ -658,11 +703,16 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             // Linear gradient
             const linearGrad = document.createElementNS(svgNs, 'linearGradient');
             linearGrad.setAttribute('id', fillGradId);
+            linearGrad.setAttribute(
+              'color-interpolation',
+              gradientFillData.colorInterpolation ?? 'linearRGB',
+            );
+            linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
             const coords = angleToSvgGradientCoords(gradientFillData.angle);
-            linearGrad.setAttribute('x1', coords.x1);
-            linearGrad.setAttribute('y1', coords.y1);
-            linearGrad.setAttribute('x2', coords.x2);
-            linearGrad.setAttribute('y2', coords.y2);
+            linearGrad.setAttribute('x1', String((parseFloat(coords.x1) / 100) * svgW));
+            linearGrad.setAttribute('y1', String((parseFloat(coords.y1) / 100) * svgH));
+            linearGrad.setAttribute('x2', String((parseFloat(coords.x2) / 100) * svgW));
+            linearGrad.setAttribute('y2', String((parseFloat(coords.y2) / 100) * svgH));
             for (const stop of gradientFillData.stops) {
               const svgStop = document.createElementNS(svgNs, 'stop');
               svgStop.setAttribute('offset', `${stop.position}%`);
@@ -758,6 +808,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         const gradId = `grad-stroke-${++gradientIdCounter}`;
         const linearGrad = document.createElementNS(svgNs, 'linearGradient');
         linearGrad.setAttribute('id', gradId);
+        linearGrad.setAttribute(
+          'color-interpolation',
+          gradientStroke.colorInterpolation ?? 'linearRGB',
+        );
         linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
 
         // Convert gradient angle to absolute coordinates in SVG user space
@@ -798,7 +852,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         path.setAttribute('stroke-width', String(effectiveStrokeWidth));
         if (strokeLinecap) path.setAttribute('stroke-linecap', strokeLinecap);
         if (strokeLinejoin) path.setAttribute('stroke-linejoin', strokeLinejoin);
-        if (strokeDash === 'dashed') {
+        const svgDashArray = svgDashArrayForKind(strokeDashKind, effectiveStrokeWidth);
+        if (svgDashArray) {
+          path.setAttribute('stroke-dasharray', svgDashArray);
+        } else if (strokeDash === 'dashed') {
           path.setAttribute(
             'stroke-dasharray',
             `${effectiveStrokeWidth * 4},${effectiveStrokeWidth * 2}`,
@@ -847,11 +904,6 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         }
       }
 
-      // Only add defs if it has children
-      if (defs.children.length > 0) {
-        svg.insertBefore(defs, svg.firstChild);
-      }
-
       // Insert rect blend group (two linear gradients + lighten) before the main path
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((path as any).__rectBlendGroup) {
@@ -868,7 +920,46 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       // fill modifiers (darkenLess for shadow areas, none for stroke-only detail lines).
       if (multiPaths && multiPaths.length > 1) {
         const mainPathFill = path.getAttribute('fill') ?? '';
-        const baseRgb = parseCssColorToRgb(mainPathFill);
+        const presetLower = node.presetGeometry?.toLowerCase() ?? '';
+        const shadingBaseFill =
+          mainPathFill && !mainPathFill.startsWith('url(')
+            ? mainPathFill
+            : fillRef?.exists()
+              ? resolveColorToCss(fillRef, ctx)
+              : (gradientFillData?.stops[0]?.color ?? fillCss);
+        const baseRgb = parseCssColorToRgb(shadingBaseFill);
+        const appendTintedGradientFill = (
+          amount: number,
+          target: { r: number; g: number; b: number },
+        ): string | undefined => {
+          if (gradientFillData?.type !== 'linear' || gradientFillData.stops.length === 0)
+            return undefined;
+          const gradId = `grad-fill-detail-${++gradientIdCounter}`;
+          const linearGrad = document.createElementNS(svgNs, 'linearGradient');
+          linearGrad.setAttribute('id', gradId);
+          linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+          linearGrad.setAttribute(
+            'color-interpolation',
+            gradientFillData.colorInterpolation ?? 'sRGB',
+          );
+          const coords = angleToSvgGradientCoords(gradientFillData.angle);
+          linearGrad.setAttribute('x1', String((parseFloat(coords.x1) / 100) * svgW));
+          linearGrad.setAttribute('y1', String((parseFloat(coords.y1) / 100) * svgH));
+          linearGrad.setAttribute('x2', String((parseFloat(coords.x2) / 100) * svgW));
+          linearGrad.setAttribute('y2', String((parseFloat(coords.y2) / 100) * svgH));
+          for (const stop of gradientFillData.stops) {
+            const svgStop = document.createElementNS(svgNs, 'stop');
+            svgStop.setAttribute('offset', `${stop.position}%`);
+            const stopRgb = parseCssColorToRgb(stop.color);
+            svgStop.setAttribute(
+              'stop-color',
+              stopRgb ? mixRgb(stopRgb, target, amount) : stop.color,
+            );
+            linearGrad.appendChild(svgStop);
+          }
+          defs.appendChild(linearGrad);
+          return `url(#${gradId})`;
+        };
         // The first path was already rendered above as the main path.
         // Render additional sub-paths (darkenLess shadow, stroke-only detail lines).
         for (let pi = 1; pi < multiPaths.length; pi++) {
@@ -880,24 +971,57 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           } else if (sp.fill === 'darkenLess') {
             extraPath.setAttribute(
               'fill',
-              baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.15) : 'rgba(0,0,0,0.15)',
+              appendTintedGradientFill(0.15, { r: 0, g: 0, b: 0 }) ||
+                (baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.15) : 'rgba(0,0,0,0.15)'),
             );
           } else if (sp.fill === 'darken') {
             extraPath.setAttribute(
               'fill',
-              baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.3) : 'rgba(0,0,0,0.3)',
+              appendTintedGradientFill(0.3, { r: 0, g: 0, b: 0 }) ||
+                (baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.3) : 'rgba(0,0,0,0.3)'),
             );
           } else if (sp.fill === 'lightenLess') {
             extraPath.setAttribute(
               'fill',
-              baseRgb
-                ? mixRgb(baseRgb, { r: 255, g: 255, b: 255 }, 0.18)
-                : 'rgba(255,255,255,0.15)',
+              appendTintedGradientFill(0.18, { r: 255, g: 255, b: 255 }) ||
+                (baseRgb
+                  ? mixRgb(baseRgb, { r: 255, g: 255, b: 255 }, 0.18)
+                  : 'rgba(255,255,255,0.15)'),
             );
           } else if (sp.fill === 'lighten') {
+            let canHighlight: string | undefined;
+            if (
+              presetLower === 'can' &&
+              gradientFillData?.type === 'linear' &&
+              gradientFillData.stops.length > 0
+            ) {
+              const faceGradId = `grad-fill-face-${++gradientIdCounter}`;
+              const faceGrad = document.createElementNS(svgNs, 'linearGradient');
+              faceGrad.setAttribute('id', faceGradId);
+              faceGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+              faceGrad.setAttribute('color-interpolation', 'sRGB');
+              const coords = angleToSvgGradientCoords(gradientFillData.angle);
+              faceGrad.setAttribute('x1', String((parseFloat(coords.x1) / 100) * svgW));
+              faceGrad.setAttribute('y1', String((parseFloat(coords.y1) / 100) * svgH));
+              faceGrad.setAttribute('x2', String((parseFloat(coords.x2) / 100) * svgW));
+              faceGrad.setAttribute('y2', String((parseFloat(coords.y2) / 100) * svgH));
+              for (const stop of gradientFillData.stops) {
+                const svgStop = document.createElementNS(svgNs, 'stop');
+                svgStop.setAttribute('offset', `${stop.position}%`);
+                svgStop.setAttribute('stop-color', applyTint(stop.color, 65000));
+                faceGrad.appendChild(svgStop);
+              }
+              defs.appendChild(faceGrad);
+              canHighlight = `url(#${faceGradId})`;
+            } else if (presetLower === 'can' && mainPathFill.startsWith('url(')) {
+              canHighlight = mainPathFill;
+            }
             extraPath.setAttribute(
               'fill',
-              baseRgb ? mixRgb(baseRgb, { r: 255, g: 255, b: 255 }, 0.3) : 'rgba(255,255,255,0.3)',
+              canHighlight ||
+                (baseRgb
+                  ? mixRgb(baseRgb, { r: 255, g: 255, b: 255 }, 0.3)
+                  : 'rgba(255,255,255,0.3)'),
             );
           } else {
             // 'norm' — same fill as main path
@@ -907,11 +1031,80 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             extraPath.setAttribute('stroke', strokeColor);
             const isBorderCalloutLeader =
               node.presetGeometry?.toLowerCase() === 'bordercallout1' && sp.fill === 'none';
+            const scaledStrokeWidth =
+              sp.strokeWidthScale && Number.isFinite(sp.strokeWidthScale) && sp.strokeWidthScale > 0
+                ? effectiveStrokeWidth * sp.strokeWidthScale
+                : effectiveStrokeWidth;
             const extraStrokeWidth = isBorderCalloutLeader
-              ? Math.max(effectiveStrokeWidth, 2.4)
-              : effectiveStrokeWidth;
+              ? Math.max(scaledStrokeWidth, 2.4)
+              : scaledStrokeWidth;
             extraPath.setAttribute('stroke-width', String(extraStrokeWidth));
             if (isBorderCalloutLeader) extraPath.setAttribute('stroke-linecap', 'round');
+            if (
+              sp.maskToMainOutlineBandScale &&
+              sp.maskToMainOutlineBandScale > 0 &&
+              sp.maskToMainOutlineBandScale < 1
+            ) {
+              const maskId = `shape-detail-band-mask-${++gradientIdCounter}`;
+              const mask = document.createElementNS(svgNs, 'mask');
+              mask.setAttribute('id', maskId);
+              mask.setAttribute('maskUnits', 'userSpaceOnUse');
+              mask.setAttribute('maskContentUnits', 'userSpaceOnUse');
+              const maskBg = document.createElementNS(svgNs, 'rect');
+              maskBg.setAttribute('x', '0');
+              maskBg.setAttribute('y', '0');
+              maskBg.setAttribute('width', String(svgW));
+              maskBg.setAttribute('height', String(svgH));
+              maskBg.setAttribute('fill', 'black');
+              mask.appendChild(maskBg);
+
+              const outerPath = document.createElementNS(svgNs, 'path');
+              outerPath.setAttribute('d', pathD);
+              outerPath.setAttribute('fill', 'white');
+              outerPath.setAttribute('stroke', 'none');
+              mask.appendChild(outerPath);
+
+              const insetScale = sp.maskToMainOutlineBandScale;
+              const insetPath = document.createElementNS(svgNs, 'path');
+              insetPath.setAttribute('d', pathD);
+              insetPath.setAttribute('fill', 'black');
+              insetPath.setAttribute('stroke', 'none');
+              const tx = (svgW * (1 - insetScale)) / 2;
+              const ty = (svgH * (1 - insetScale)) / 2;
+              insetPath.setAttribute('transform', `translate(${tx} ${ty}) scale(${insetScale})`);
+              mask.appendChild(insetPath);
+
+              defs.appendChild(mask);
+              extraPath.setAttribute('mask', `url(#${maskId})`);
+            } else if (sp.maskToMainOutline) {
+              const maskId = `shape-detail-mask-${++gradientIdCounter}`;
+              const mask = document.createElementNS(svgNs, 'mask');
+              mask.setAttribute('id', maskId);
+              mask.setAttribute('maskUnits', 'userSpaceOnUse');
+              mask.setAttribute('maskContentUnits', 'userSpaceOnUse');
+              const maskBg = document.createElementNS(svgNs, 'rect');
+              maskBg.setAttribute('x', '0');
+              maskBg.setAttribute('y', '0');
+              maskBg.setAttribute('width', String(svgW));
+              maskBg.setAttribute('height', String(svgH));
+              maskBg.setAttribute('fill', 'black');
+              mask.appendChild(maskBg);
+              const maskPath = document.createElementNS(svgNs, 'path');
+              maskPath.setAttribute('d', pathD);
+              maskPath.setAttribute('fill', 'none');
+              maskPath.setAttribute('stroke', 'white');
+              const maskStrokeWidth = Math.max(
+                extraStrokeWidth *
+                  (sp.maskStrokeScale && sp.maskStrokeScale > 0 ? sp.maskStrokeScale : 3),
+                extraStrokeWidth,
+              );
+              maskPath.setAttribute('stroke-width', String(maskStrokeWidth));
+              maskPath.setAttribute('stroke-linecap', 'round');
+              maskPath.setAttribute('stroke-linejoin', 'round');
+              mask.appendChild(maskPath);
+              defs.appendChild(mask);
+              extraPath.setAttribute('mask', `url(#${maskId})`);
+            }
           } else if (sp.stroke) {
             // Detail lines without explicit line style: avoid using identical fill color,
             // otherwise guide lines (e.g. chartX diagonals) become visually invisible.
@@ -923,6 +1116,11 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           }
           svg.appendChild(extraPath);
         }
+      }
+
+      // Some multi-path detail rendering adds masks/gradients after the initial defs population.
+      if (defs.children.length > 0 && !defs.parentNode) {
+        svg.insertBefore(defs, svg.firstChild);
       }
 
       // circularArrow: ensure no stroke and remove markers

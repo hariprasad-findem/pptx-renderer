@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-03-09
+
+### Added
+
+- **Python-pptx ground truth pipeline** — second test case generation pipeline using `python-pptx` for PPTX creation and PowerPoint COM for PDF/PNG export. Generates 100 new cases (`oracle-pypptx-*` prefix) covering rich text (38 cases), shape adjustments (31 cases), composite layouts (10 cases), and chart variants (21 cases).
+- **Expanded VBA ground truth catalogs** — fill/stroke configs from 10 to 36 (new solids, gradients, patterns, dash styles, colored strokes), table configs from 7 to 15 (edge cases like 1×1, 10×1), connector configs from 6 to 9 (remaining orientations), and dynamic chart type probe with 103-entry `XlChartType` fallback dict.
+- **Visual regression cases**: 352 → 452+ total automated cases, all passing with zero failures.
+- **Unit tests**: 1400+ new lines of test coverage for ChartRenderer (lifecycle + rendering), ShapeRenderer, StyleResolver, TableRenderer, and preset shapes.
+
+### Changed
+
+- **Chart color fidelity** — use theme accent palette (`option.color`) instead of hardcoded `DEFAULT_SERIES_COLORS` for scatter, bubble, and radar series fallback colors. Add candlestick up/down colors from OOXML series `spPr` in stock charts.
+- **Scatter/bubble axis handling** — new `parseScatterAxes()` correctly parses two `valAx` nodes by axis position (`b/t` → X, `l/r` → Y). Fix gridlines direction: Y-axis `majorGridlines` now render as horizontal lines.
+- **Scatter chart markers** — parse `scatterStyle` (`lineMarker`/`smoothMarker`) to default diamond markers. Apply OOXML marker symbols and sizes per series.
+- **Auto-title for all chart types** — pass `seriesArr` to `extractChartTitle()` in all builders (bar, line, scatter, bubble, radar, stock) enabling auto-generated title from series name when `autoTitleDeleted=0`.
+- **Legend icons** — respect per-item OOXML marker symbols (circle, diamond, triangle) for line/area/radar instead of always overriding to `rect`.
+- **Radar chart** — add `areaStyle` with semi-transparent fill (0.15 standard, 0.5 for filled style).
+- **Bar width formula** — fix `barCategoryGap` to account for number of series in clustered bars: `gapWidth / (100 × N + gapWidth)` instead of `gapWidth / (100 + gapWidth)`.
+- **Chart font size propagation** — extend `applyDefaultFontSizes` to also override series data label font sizes with `chartSpace txPr` default when no explicit OOXML font was set.
+- **Windows ground truth pipeline** — per-case independent COM sessions for fault isolation, retry helpers for Windows file handle races, absolute output paths for VBA `SaveAs`.
+
+### Fixed
+
+- Scatter/bubble/radar series now use theme accent colors consistently instead of hardcoded palette.
+- Stock chart candlestick colors now read from OOXML series style properties.
+- Clustered bar chart width calculation now correct for multi-series charts.
+- Chart data labels inherit `chartSpace txPr` default font size when no explicit size is set.
+- Windows COM ground truth generation: `RPC_E_CALL_REJECTED` retry with exponential backoff, `pres.Saved=True` before `Close()` to suppress save dialogs.
+
 ## [1.0.1] - 2026-03-01
 
 ### Added
@@ -69,7 +98,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Backgrounds**: slide → layout → master inheritance chain (solid, gradient, image, pattern).
 - **Security**: ZIP parsing limits (`ZipParseLimits`), external hyperlink protocol filtering.
 - **Performance**: windowed list mounting via `IntersectionObserver`, batch rendering, large-deck tuning knobs.
-- **Visual regression testing**: 352+ automated cases (187+ shapes, 134+ SmartArt, 37+ fill/stroke variants) verified against PowerPoint output using SSIM + color histogram correlation. Zero failures.
+- **Visual regression testing**: 352 automated cases (187+ shapes, 134+ SmartArt, 37 fill/stroke variants) verified against PowerPoint output using SSIM + color histogram correlation. Zero failures.
 - **Quality tooling**: ESLint, Prettier, commitlint (Conventional Commits), husky pre-commit hooks, knip (dead code detection), publint, size-limit.
 - **Documentation**: architecture, testing, performance, contributing, security, and releasing guides.
 
