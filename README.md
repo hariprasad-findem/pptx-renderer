@@ -23,7 +23,7 @@ A complex slide with charts, text styles, shapes, and SmartArt — PowerPoint gr
 
 ## Visual Regression Testing
 
-Every rendering capability is automatically verified against PowerPoint output. **352+ visual regression cases** with zero failures — covering 187+ preset shapes, 134+ SmartArt layouts, and 37+ fill/stroke/gradient variants.
+Every rendering capability is automatically verified against PowerPoint output. **452+ visual regression cases** with zero failures — covering 187+ preset shapes, 134+ SmartArt layouts, 36+ fill/stroke/gradient variants, and 100 python-pptx cases (text, shape adjustments, composites, charts).
 
 <img src="docs/example/e2e-test-page.png" alt="E2E evaluation dashboard" width="800" />
 
@@ -278,7 +278,7 @@ Full OOXML text cascade: master → layout → shape → paragraph → run. Supp
 
 ### Charts via ECharts
 
-Bar/Column, Line, Area, Pie, Doughnut, Radar, Scatter, Surface — each with 2D and 3D variants. Powered by [ECharts](https://echarts.apache.org/), with axis labels, legends, data labels, grid lines, series colors from theme, and custom number formats.
+Bar/Column, Line, Area, Pie, Doughnut, Radar, Scatter, Bubble, Surface, Stock/Candlestick — each with 2D and 3D variants. Powered by [ECharts](https://echarts.apache.org/), with axis labels, legends, data labels, grid lines, series colors from theme, marker symbols, and custom number formats.
 
 ### Fill, Stroke & Color
 

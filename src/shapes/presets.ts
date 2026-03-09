@@ -73,6 +73,75 @@ function starShape(w: number, h: number, points: number, innerRatio: number = 0.
   return parts.join(' ');
 }
 
+/**
+ * Mirror an absolute SVG path horizontally across the given width.
+ * Supports the command subset used by preset arrow shapes: M, L, A, Z.
+ */
+function mirrorAbsolutePathHorizontally(path: string, width: number): string {
+  const tokens = path.match(/[MLAZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
+  if (!tokens) return path;
+
+  const out: string[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (!cmd) break;
+    out.push(cmd);
+    if (cmd === 'Z') continue;
+    if (cmd === 'M' || cmd === 'L') {
+      const x = Number(tokens[i++]);
+      const y = Number(tokens[i++]);
+      out.push(String(width - x), String(y));
+      continue;
+    }
+    if (cmd === 'A') {
+      const rx = tokens[i++];
+      const ry = tokens[i++];
+      const rot = tokens[i++];
+      const largeArc = tokens[i++];
+      const sweep = Number(tokens[i++]);
+      const x = Number(tokens[i++]);
+      const y = Number(tokens[i++]);
+      out.push(rx, ry, rot, largeArc, String(sweep ? 0 : 1), String(width - x), String(y));
+      continue;
+    }
+    return path;
+  }
+
+  return out.join(' ');
+}
+
+function mirrorAbsolutePathVertically(path: string, height: number): string {
+  const tokens = path.match(/[MLAZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
+  if (!tokens) return path;
+
+  const out: string[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (!cmd) break;
+    out.push(cmd);
+    if (cmd === 'Z') continue;
+    if (cmd === 'M' || cmd === 'L') {
+      const x = Number(tokens[i++]);
+      const y = Number(tokens[i++]);
+      out.push(String(x), String(height - y));
+      continue;
+    }
+    if (cmd === 'A') {
+      const rx = tokens[i++];
+      const ry = tokens[i++];
+      const rot = tokens[i++];
+      const largeArc = tokens[i++];
+      const sweep = Number(tokens[i++]);
+      const x = Number(tokens[i++]);
+      const y = Number(tokens[i++]);
+      out.push(rx, ry, rot, largeArc, String(sweep ? 0 : 1), String(x), String(height - y));
+    }
+  }
+  return out.join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // Preset shape registry
 // ---------------------------------------------------------------------------
@@ -1395,78 +1464,78 @@ presetShapes.set('curvedRightArrow', (w, h, adjustments) => {
     `L${x1},${y8}`,
     `L${x1},${y7}`,
     arc(w, y3, w, hR, stAngDg, stAngDg + swAngDg).replace('M', 'L'),
-    `L${l},${hR}`,
-    arc(w, hR, w, hR, cd2, cd2 + cd4).replace('M', 'L'),
+    'Z',
+    arc(w, hR, w, hR, cd2, cd2 + cd4),
     `L${r},${th}`,
     arc(w, y3, w, hR, c3d4, c3d4 + swAng2Dg).replace('M', 'L'),
-  ].join(' ');
-});
-
-presetShapes.set('curvedLeftArrow', (w, h, adjustments) => {
-  const adj1 = adjustments?.get('adj1') ?? 25000;
-  const adj2 = adjustments?.get('adj2') ?? 50000;
-  const adj3 = adjustments?.get('adj3') ?? 25000;
-  const ss = Math.min(w, h);
-  const a2 = Math.max(0, Math.min(adj2, (50000 * h) / Math.max(ss, 1)));
-  const a1 = Math.max(0, Math.min(adj1, a2));
-  const th = (ss * a1) / 100000;
-  const aw = (ss * a2) / 100000;
-  const hd2 = h / 2;
-  const q1 = (th + aw) / 4;
-  const hR = hd2 - q1;
-  const q7 = hR * 2;
-  const iDx = (Math.sqrt(Math.max(q7 * q7 - th * th, 0)) * w) / Math.max(q7, 1);
-  const a3 = Math.max(0, Math.min(adj3, (100000 * iDx) / Math.max(ss, 1)));
-  const ah = (ss * a3) / 100000;
-  const y3 = hR + th;
-  const dy = (Math.sqrt(Math.max(w * w - ah * ah, 0)) * hR) / Math.max(w, 1);
-  const y5 = hR + dy;
-  const y7 = y3 + dy;
-  const dh = (aw - th) / 2;
-  const y4 = y5 - dh;
-  const y8 = y7 + dh;
-  const y6 = h - aw / 2;
-  const x1 = ah;
-  const swAng = Math.atan2(dy, ah);
-  const swAngDeg = (swAng * 180) / Math.PI;
-  const swAng2Deg = (Math.atan2(th / 2, iDx) * 180) / Math.PI - swAngDeg;
-  const arc = (
-    cx: number,
-    cy: number,
-    rx: number,
-    ry: number,
-    startDeg: number,
-    endDeg: number,
-  ): string => {
-    const s = (startDeg * Math.PI) / 180;
-    const e = (endDeg * Math.PI) / 180;
-    const xS = cx + rx * Math.cos(s);
-    const yS = cy + ry * Math.sin(s);
-    const xE = cx + rx * Math.cos(e);
-    const yE = cy + ry * Math.sin(e);
-    const delta = endDeg - startDeg;
-    const largeArc = Math.abs(delta) > 180 ? 1 : 0;
-    const sweep = delta >= 0 ? 1 : 0;
-    return `M${xS},${yS} A${rx},${ry} 0 ${largeArc},${sweep} ${xE},${yE}`;
-  };
-  return [
-    `M${w},${y3}`,
-    arc(0, hR, w, hR, 0, -90).replace('M', 'L'),
-    `L0,0`,
-    arc(0, y3, w, hR, 270, 360).replace('M', 'L'),
-    `L${w},${y3}`,
-    arc(0, y3, w, hR, 0, swAngDeg).replace('M', 'L'),
-    `L${x1},${y7}`,
-    `L${x1},${y8}`,
-    `L0,${y6}`,
-    `L${x1},${y4}`,
-    `L${x1},${y5}`,
-    arc(0, hR, w, hR, swAngDeg, swAngDeg + swAng2Deg).replace('M', 'L'),
-    arc(0, hR, w, hR, 0, -90).replace('M', 'L'),
-    arc(0, y3, w, hR, 270, 360).replace('M', 'L'),
     'Z',
   ].join(' ');
 });
+
+presetShapes.set('curvedLeftArrow', (w, h, adjustments) =>
+  mirrorAbsolutePathHorizontally(presetShapes.get('curvedRightArrow')!(w, h, adjustments), w),
+);
+
+function splitFirstClosedContour(path: string): { outer: string; remainder: string } {
+  const closeIdx = path.indexOf('Z');
+  if (closeIdx === -1) {
+    return { outer: path, remainder: '' };
+  }
+  const outer = path.slice(0, closeIdx + 1).trim();
+  const remainder = path.slice(closeIdx + 1).trim();
+  return { outer, remainder };
+}
+
+function buildCurvedArrowMultiPath(
+  shapeName: 'curvedRightArrow' | 'curvedLeftArrow',
+  w: number,
+  h: number,
+  adjustments?: Map<string, number>,
+): PresetSubPath[] {
+  const fullPath = presetShapes.get(shapeName)!(w, h, adjustments);
+  const { outer, remainder } = splitFirstClosedContour(fullPath);
+  if (!remainder) {
+    return [{ d: fullPath, fill: 'norm', stroke: true }];
+  }
+
+  if (shapeName === 'curvedRightArrow') {
+    return [
+      { d: remainder, fill: 'norm', stroke: true },
+      { d: outer, fill: 'norm', stroke: true },
+    ];
+  }
+
+  return [
+    { d: outer, fill: 'norm', stroke: true },
+    { d: remainder, fill: 'norm', stroke: true },
+  ];
+}
+
+function buildCurvedVerticalArrowMultiPath(
+  shapeName: 'curvedUpArrow' | 'curvedDownArrow',
+  w: number,
+  h: number,
+  adjustments?: Map<string, number>,
+): PresetSubPath[] {
+  const downFullPath = presetShapes.get('curvedDownArrow')!(w, h, adjustments);
+  const { outer, remainder } = splitFirstClosedContour(downFullPath);
+  const ordered: PresetSubPath[] = remainder
+    ? [
+        { d: remainder, fill: 'norm', stroke: true },
+        { d: outer, fill: 'norm', stroke: true },
+      ]
+    : [{ d: downFullPath, fill: 'norm', stroke: true }];
+
+  if (shapeName === 'curvedDownArrow') {
+    return ordered;
+  }
+
+  const mirrored: PresetSubPath[] = ordered.map((path) => ({
+    ...path,
+    d: mirrorAbsolutePathVertically(path.d, h),
+  }));
+  return mirrored.reverse();
+}
 
 /**
  * Convert OOXML arcTo to SVG arc endpoint and command string.
@@ -3512,11 +3581,11 @@ presetShapes.set('bevel', (w, h, adjustments) => {
 
 presetShapes.set('foldedCorner', (w, h, adjustments) => {
   const a = adj(adjustments, 'adj', 16667);
-  const fold = Math.min(w, h) * a;
+  const fold = Math.min(w, h) * a * 0.7;
   return [
-    `M0,0 L${w},0 L${w},${h - fold} L${w - fold},${h} L0,${h} Z`,
+    `M0,0 L${w},0 L${w},${h} L0,${h} Z`,
     // Fold triangle
-    `M${w - fold},${h} L${w - fold},${h - fold} L${w},${h - fold}`,
+    `M${w - fold},${h} L${w},${h} L${w},${h - fold}`,
   ].join(' ');
 });
 
@@ -4422,6 +4491,14 @@ export interface PresetSubPath {
   fill: 'norm' | 'darken' | 'darkenLess' | 'lighten' | 'lightenLess' | 'none';
   /** Whether this path should have a stroke (default true) */
   stroke: boolean;
+  /** Optional stroke width multiplier for detail lines that should render lighter than the outline. */
+  strokeWidthScale?: number;
+  /** Restrict visibility of this detail path to a stroke band around the main outline path. */
+  maskToMainOutline?: boolean;
+  /** Optional scale for the outline-band mask stroke width. */
+  maskStrokeScale?: number;
+  /** Restrict visibility of this detail path to the band between the main outline and an inset-scaled outline. */
+  maskToMainOutlineBandScale?: number;
 }
 
 type MultiPathPresetGenerator = (
@@ -4463,6 +4540,11 @@ multiPathPresets.set('actionButtonForwardNext', (w, h) => {
     { d: tri, fill: 'none', stroke: true },
     { d: _rect(w, h), fill: 'none', stroke: true },
   ];
+});
+
+multiPathPresets.set('actionButtonForward', (w, h) => {
+  const forwardNext = multiPathPresets.get('actionButtonForwardNext');
+  return forwardNext ? forwardNext(w, h) : [];
 });
 
 // actionButtonBackPrevious (VBA 0129): left-pointing triangle ◀
@@ -5433,6 +5515,19 @@ multiPathPresets.set('smileyFace', (w, h, adjustments) => {
   ];
 });
 
+multiPathPresets.set('foldedCorner', (w, h, adjustments) => {
+  const a = adj(adjustments, 'adj', 16667);
+  const fold = Math.min(w, h) * a * 0.7;
+  const body = `M0,0 L${w},0 L${w},${h - fold} L${w - fold},${h} L0,${h} Z`;
+  const foldFace = `M${w - fold},${h} L${w - fold},${h - fold} L${w},${h - fold} Z`;
+  const crease = `M${w - fold},${h} L${w - fold},${h - fold}`;
+  return [
+    { d: body, fill: 'norm', stroke: true },
+    { d: foldFace, fill: 'darkenLess', stroke: false },
+    { d: crease, fill: 'none', stroke: true },
+  ];
+});
+
 multiPathPresets.set('can', (w, h, adjustments) => {
   // OOXML: 3 paths — body (norm), top face (lighten), outline (stroke-only)
   const ss = Math.min(w, h);
@@ -5478,6 +5573,22 @@ multiPathPresets.set('can', (w, h, adjustments) => {
     { d: outline, fill: 'none', stroke: true },
   ];
 });
+
+multiPathPresets.set('curvedrightarrow', (w, h, adjustments) =>
+  buildCurvedArrowMultiPath('curvedRightArrow', w, h, adjustments),
+);
+
+multiPathPresets.set('curvedleftarrow', (w, h, adjustments) =>
+  buildCurvedArrowMultiPath('curvedLeftArrow', w, h, adjustments),
+);
+
+multiPathPresets.set('curveduparrow', (w, h, adjustments) =>
+  buildCurvedVerticalArrowMultiPath('curvedUpArrow', w, h, adjustments),
+);
+
+multiPathPresets.set('curveddownarrow', (w, h, adjustments) =>
+  buildCurvedVerticalArrowMultiPath('curvedDownArrow', w, h, adjustments),
+);
 
 multiPathPresets.set('bordercallout1', (w, h, adjustments) => {
   // OOXML: filled+stroked rectangle body + separate leader line (stroke-only).

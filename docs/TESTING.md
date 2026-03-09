@@ -117,7 +117,7 @@ The comparison pipeline uses a **two-layer metric system**. This design was arri
 
 ### Pass/Fail Layer (automated)
 
-These two metrics determine pass/fail. Chosen for zero false positives across all 352 baseline cases:
+These two metrics determine pass/fail. Chosen for zero false positives across all 452+ baseline cases:
 
 | Metric            | Range   | Threshold | What it catches                                                                 |
 | ----------------- | ------- | --------- | ------------------------------------------------------------------------------- |
