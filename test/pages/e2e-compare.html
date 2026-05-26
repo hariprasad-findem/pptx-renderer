@@ -363,6 +363,7 @@
       const params = new URLSearchParams(location.search);
       let currentSource = params.get('source') || '';
       if (currentSource) sourceSelect.value = currentSource;
+      let requestedSlideNumber = parseRequestedSlideNumber(params.get('slide'));
       const listStrategyParam = params.get('listStrategy');
       const listBatchSizeParam = Number(params.get('listBatchSize'));
       const windowedInitialSlidesParam = Number(params.get('windowedInitialSlides'));
@@ -375,6 +376,45 @@
       /** Return the testdata subdirectory name for the current source. */
       function testdataSubdir() {
         return currentSource === 'windows' ? 'windows-cases' : 'cases';
+      }
+
+      function parseRequestedSlideNumber(value) {
+        if (value === null || value === '' || value === 'all') return null;
+        const slideNumber = Number(value);
+        return Number.isInteger(slideNumber) && slideNumber > 0 ? slideNumber : null;
+      }
+
+      function writeSlideFilterToUrl() {
+        const url = new URL(location);
+        if (pageSelect.value === 'all') {
+          url.searchParams.delete('slide');
+          requestedSlideNumber = null;
+        } else {
+          const slideNumber = Number(pageSelect.value) + 1;
+          url.searchParams.set('slide', String(slideNumber));
+          requestedSlideNumber = slideNumber;
+        }
+        history.replaceState(null, '', url);
+      }
+
+      function clearSlideFilterUrlParam() {
+        const url = new URL(location);
+        url.searchParams.delete('slide');
+        history.replaceState(null, '', url);
+      }
+
+      function applyRequestedSlideFilter(slideCount) {
+        if (requestedSlideNumber === null) {
+          pageSelect.value = 'all';
+          return;
+        }
+        if (requestedSlideNumber >= 1 && requestedSlideNumber <= slideCount) {
+          pageSelect.value = String(requestedSlideNumber - 1);
+          return;
+        }
+        pageSelect.value = 'all';
+        requestedSlideNumber = null;
+        clearSlideFilterUrlParam();
       }
 
       function buildListOptions() {
@@ -929,6 +969,7 @@
             opt.textContent = `Slide ${i + 1}`;
             pageSelect.appendChild(opt);
           }
+          applyRequestedSlideFilter(slideCount);
 
           // Server-side visual metrics (start in background, do not block first render)
           let ssimPromise = Promise.resolve(null);
@@ -1741,6 +1782,7 @@
       });
 
       pageSelect.addEventListener('change', () => {
+        writeSlideFilterToUrl();
         applyViewAndFilter();
         // Scroll to the selected slide card
         if (pageSelect.value !== 'all' && builtCards) {

@@ -5,11 +5,12 @@
 
 import { SafeXmlNode } from '../parser/XmlParser';
 import { RenderContext } from './RenderContext';
-import { TextBody } from '../model/nodes/ShapeNode';
+import type { TextBody, TextParagraph, TextRun } from '../model/nodes/ShapeNode';
 import { PlaceholderInfo } from '../model/nodes/BaseNode';
 import { resolveColor, resolveColorToCss } from './StyleResolver';
 import { emuToPx, pctToDecimal, angleToDeg } from '../parser/units';
 import { isAllowedExternalUrl } from '../utils/urlSafety';
+import { getEffectiveBodyPrChild } from './TextBodyProperties';
 
 // ---------------------------------------------------------------------------
 // Style Inheritance Helpers
@@ -115,10 +116,15 @@ interface MergedParagraphStyle {
   bulletChar?: string;
   bulletFont?: string;
   bulletAutoNum?: string;
+  bulletAutoNumStartAt?: number;
+  bulletSizePct?: number;
+  bulletSizePt?: number;
+  bulletColorFollowsText?: boolean;
   bulletNone?: boolean;
   /** When set, bullet color is taken from this OOXML buClr node (a:buClr with srgbClr/schemeClr child). */
   bulletColorNode?: SafeXmlNode;
   defRPr?: SafeXmlNode;
+  defRPrs?: SafeXmlNode[];
 }
 
 function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): void {
@@ -201,6 +207,8 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   const buAutoNum = pPr.child('buAutoNum');
   if (buAutoNum.exists()) {
     target.bulletAutoNum = buAutoNum.attr('type') || 'arabicPeriod';
+    const startAt = buAutoNum.numAttr('startAt');
+    if (startAt !== undefined) target.bulletAutoNumStartAt = startAt;
     target.bulletNone = false;
   }
   const buNone = pPr.child('buNone');
@@ -213,16 +221,46 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   if (buFont.exists()) {
     target.bulletFont = buFont.attr('typeface');
   }
-  // Explicit bullet color (a:buClr); when present overrides defRPr for bullet color
+  const buSzPct = pPr.child('buSzPct');
+  if (buSzPct.exists()) {
+    const val = buSzPct.numAttr('val');
+    if (val !== undefined) {
+      target.bulletSizePct = val / 100000;
+      target.bulletSizePt = undefined;
+    }
+  }
+  const buSzPts = pPr.child('buSzPts');
+  if (buSzPts.exists()) {
+    const val = buSzPts.numAttr('val');
+    if (val !== undefined) {
+      target.bulletSizePt = val / 100;
+      target.bulletSizePct = undefined;
+    }
+  }
+  const buSzTx = pPr.child('buSzTx');
+  if (buSzTx.exists()) {
+    target.bulletSizePct = undefined;
+    target.bulletSizePt = undefined;
+  }
+  // Bullet color follows text color (a:buClrTx). This must override inherited bullet colors.
+  const buClrTx = pPr.child('buClrTx');
+  if (buClrTx.exists()) {
+    target.bulletColorFollowsText = true;
+    target.bulletColorNode = undefined;
+  }
+  // Explicit bullet color (a:buClr); when present overrides buClrTx/defRPr for bullet color.
   const buClr = pPr.child('buClr');
   if (buClr.exists()) {
     target.bulletColorNode = buClr;
+    target.bulletColorFollowsText = false;
   }
 
   // Default run properties (used as fallback for runs without rPr)
   const defRPr = pPr.child('defRPr');
   if (defRPr.exists()) {
     target.defRPr = defRPr;
+    target.defRPrs ??= [];
+    target.defRPrs.push(defRPr);
   }
 }
 
@@ -257,6 +295,15 @@ interface MergedRunStyle {
   textOutlineColor?: string;
   /** Text outline CSS gradient (gradient fill on ln) — used as mask-image for fade effect. */
   textOutlineGradientCss?: string;
+}
+
+function getRunColorKind(rPr: SafeXmlNode | undefined): 'none' | 'defaultTextScheme' | 'explicit' {
+  if (!rPr?.exists()) return 'none';
+  if (rPr.child('gradFill').exists()) return 'explicit';
+  const solidFill = rPr.child('solidFill');
+  if (!solidFill.exists()) return 'none';
+  const scheme = solidFill.child('schemeClr').attr('val');
+  return scheme === 'tx1' || scheme === 'tx2' ? 'defaultTextScheme' : 'explicit';
 }
 
 function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderContext): void {
@@ -333,6 +380,7 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
       const rel = ctx.slide.rels.get(rId);
       if (rel && rel.targetMode === 'External' && isAllowedExternalUrl(rel.target)) {
         target.hlinkClick = rel.target;
+        if (target.underline === undefined) target.underline = true;
       }
     }
   }
@@ -377,6 +425,25 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
   }
 }
 
+function mergeParagraphDefaultRunProps(
+  target: MergedRunStyle,
+  paragraphStyle: MergedParagraphStyle,
+  ctx: RenderContext,
+): void {
+  for (const defRPr of paragraphStyle.defRPrs ?? []) {
+    mergeRunProps(target, defRPr, ctx);
+  }
+}
+
+function getParagraphDefaultRunStyle(
+  paragraphStyle: MergedParagraphStyle,
+  ctx: RenderContext,
+): MergedRunStyle {
+  const style: MergedRunStyle = {};
+  mergeParagraphDefaultRunProps(style, paragraphStyle, ctx);
+  return style;
+}
+
 /**
  * Resolve theme font placeholder references like "+mj-lt" or "+mn-lt".
  */
@@ -418,6 +485,73 @@ function colorToCssLocal(color: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
 }
 
+function getResolvedRunColor(rPr: SafeXmlNode | undefined, ctx: RenderContext): string | undefined {
+  if (!rPr?.exists()) return undefined;
+  const style: MergedRunStyle = {};
+  mergeRunProps(style, rPr, ctx);
+  return style.color;
+}
+
+function normalizeCssColorForCompare(color: string | undefined): string | undefined {
+  if (!color) return undefined;
+  const trimmed = color.trim().toLowerCase();
+  if (trimmed.startsWith('#')) {
+    const { r, g, b } = hexToRgbInternal(trimmed);
+    return `${r},${g},${b},1`;
+  }
+  const match = trimmed.match(/^rgba?\(([^)]+)\)$/);
+  if (!match) return trimmed;
+  const parts = match[1].split(',').map((part) => part.trim());
+  if (parts.length < 3) return trimmed;
+  const [r, g, b] = parts;
+  const alpha = parts[3] ?? '1';
+  return `${Number(r)},${Number(g)},${Number(b)},${Number(alpha)}`;
+}
+
+function colorsEqualForCompare(a: string | undefined, b: string | undefined): boolean {
+  const normalizedA = normalizeCssColorForCompare(a);
+  const normalizedB = normalizeCssColorForCompare(b);
+  return normalizedA !== undefined && normalizedA === normalizedB;
+}
+
+function hasSrgbSolidFill(rPr: SafeXmlNode | undefined): boolean {
+  return rPr?.child('solidFill').child('srgbClr').exists() ?? false;
+}
+
+function runHasHyperlink(rPr: SafeXmlNode | undefined): boolean {
+  return rPr?.child('hlinkClick').exists() ?? false;
+}
+
+function hasMatchingNonHyperlinkTextColor(
+  run: TextRun,
+  paragraph: TextParagraph,
+  runColor: string | undefined,
+  ctx: RenderContext,
+): boolean {
+  if (!runColor) return false;
+  for (const otherRun of paragraph.runs) {
+    if (otherRun === run || runHasHyperlink(otherRun.properties)) continue;
+    const otherColor = getResolvedRunColor(otherRun.properties, ctx);
+    if (colorsEqualForCompare(runColor, otherColor)) return true;
+  }
+  const endParaColor = getResolvedRunColor(paragraph.endParaRPr, ctx);
+  return colorsEqualForCompare(runColor, endParaColor);
+}
+
+function shouldUseHyperlinkThemeColor(
+  run: TextRun,
+  paragraph: TextParagraph,
+  runStyle: MergedRunStyle,
+  runColorKind: ReturnType<typeof getRunColorKind>,
+  hasExplicitRunColor: boolean,
+  ctx: RenderContext,
+): boolean {
+  if (!runStyle.hlinkClick) return false;
+  if (!hasExplicitRunColor || runColorKind === 'defaultTextScheme') return true;
+  if (runColorKind !== 'explicit' || !hasSrgbSolidFill(run.properties)) return false;
+  return hasMatchingNonHyperlinkTextColor(run, paragraph, runStyle.color, ctx);
+}
+
 /**
  * Resolve a gradient fill node into a CSS linear-gradient string.
  * Used for text outline gradient effects.
@@ -447,8 +581,7 @@ function resolveGradientForText(gradFill: SafeXmlNode, ctx: RenderContext): stri
 // Bullet Generation
 // ---------------------------------------------------------------------------
 
-function generateAutoNumber(type: string, index: number): string {
-  const num = index + 1;
+function generateAutoNumber(type: string, num: number): string {
   switch (type) {
     case 'arabicPeriod':
       return `${num}.`;
@@ -496,14 +629,15 @@ function toRoman(num: number): string {
 /**
  * Render a text body into the provided container element.
  *
- * Implements 7-level style inheritance:
- * 1. master.defaultTextStyle
- * 2. master.textStyles[category] (titleStyle / bodyStyle / otherStyle)
- * 3. master placeholder lstStyle
- * 4. layout placeholder lstStyle
- * 5. shape lstStyle
- * 6. paragraph pPr
- * 7. run rPr
+ * Implements style inheritance:
+ * 1. presentation.defaultTextStyle
+ * 2. master.defaultTextStyle
+ * 3. master.textStyles[category] (titleStyle / bodyStyle / otherStyle)
+ * 4. master placeholder lstStyle
+ * 5. layout placeholder lstStyle
+ * 6. shape lstStyle
+ * 7. paragraph pPr
+ * 8. run rPr
  */
 /** Optional overrides when rendering text (e.g. table cell style text properties from tcTxStyle). */
 interface RenderTextBodyOptions {
@@ -517,6 +651,14 @@ interface RenderTextBodyOptions {
   cellTextFontFamily?: string;
   /** fontRef color from shape style (e.g. SmartArt). Overrides inherited styles but yields to explicit run rPr color. */
   fontRefColor?: string;
+  /** True when the text container uses vertical writing mode. */
+  isVerticalText?: boolean;
+  /** Fallback CSS line-height when OOXML inheritance does not specify one. */
+  defaultLineHeight?: string;
+  /** Collapse paragraph spacing outside the first/last visible paragraph. */
+  trimOuterParagraphSpacing?: boolean;
+  /** Treat absolute line spacing as inter-line spacing for a single-line paragraph. */
+  compactSingleLineSpacing?: boolean;
 }
 
 export function renderTextBody(
@@ -527,32 +669,58 @@ export function renderTextBody(
   options?: RenderTextBodyOptions,
 ): void {
   const category = getPlaceholderCategory(placeholder);
-  let bulletCounter = 0;
 
   // Parse normAutofit from bodyPr (font scaling + line spacing reduction)
   let fontScale = 1;
   let lnSpcReduction = 0;
-  if (textBody.bodyProperties) {
-    const normAutofit = textBody.bodyProperties.child('normAutofit');
-    if (normAutofit.exists()) {
-      const fs = normAutofit.numAttr('fontScale');
-      if (fs !== undefined) fontScale = fs / 100000; // 100000 = 100%
-      const lsr = normAutofit.numAttr('lnSpcReduction');
-      if (lsr !== undefined) lnSpcReduction = lsr / 100000; // e.g., 20000 = 20%
-    }
+  const normAutofit = getEffectiveBodyPrChild(textBody, 'normAutofit');
+  if (normAutofit?.exists()) {
+    const fs = normAutofit.numAttr('fontScale');
+    if (fs !== undefined) fontScale = fs / 100000; // 100000 = 100%
+    const lsr = normAutofit.numAttr('lnSpcReduction');
+    if (lsr !== undefined) lnSpcReduction = lsr / 100000; // e.g., 20000 = 20%
   }
 
-  for (const paragraph of textBody.paragraphs) {
+  const bulletCounters = new Map<string, number>();
+  const visibleParagraphIndexes = textBody.paragraphs
+    .map((paragraph, index) => ({
+      index,
+      visible: paragraph.runs.some((run) => run.text != null && run.text.length > 0),
+    }))
+    .filter((item) => item.visible)
+    .map((item) => item.index);
+  const firstVisibleParagraphIndex = visibleParagraphIndexes[0];
+  const lastVisibleParagraphIndex = visibleParagraphIndexes[visibleParagraphIndexes.length - 1];
+  const singleVisibleParagraph =
+    visibleParagraphIndexes.length === 1 ? visibleParagraphIndexes[0] : undefined;
+
+  for (const [paragraphIndex, paragraph] of textBody.paragraphs.entries()) {
     const paraDiv = document.createElement('div');
+    paraDiv.style.width = '100%';
+    paraDiv.style.minWidth = '0px';
+    paraDiv.style.maxWidth = '100%';
+    paraDiv.style.boxSizing = 'border-box';
+    paraDiv.style.overflowWrap = 'anywhere';
     const level = paragraph.level;
+    if (options?.isVerticalText) {
+      paraDiv.style.wordBreak = 'keep-all';
+    }
+    const hasLineBreaks = paragraph.runs.some((r) => r.text === '\n');
+    const isSingleLineAutoFitParagraph =
+      options?.compactSingleLineSpacing &&
+      paragraphIndex === singleVisibleParagraph &&
+      !hasLineBreaks;
 
     // ---- Build merged paragraph style (7-level inheritance) ----
     const merged: MergedParagraphStyle = {};
 
-    // Level 1: master defaultTextStyle
+    // Level 1: presentation defaultTextStyle
+    mergeParagraphProps(merged, findStyleAtLevel(ctx.presentation.defaultTextStyle, level));
+
+    // Level 2: master defaultTextStyle
     mergeParagraphProps(merged, findStyleAtLevel(ctx.master.defaultTextStyle, level));
 
-    // Level 2: master text styles by category
+    // Level 3: master text styles by category
     const masterTextStyle =
       category === 'title'
         ? ctx.master.textStyles.titleStyle
@@ -561,7 +729,7 @@ export function renderTextBody(
           : ctx.master.textStyles.otherStyle;
     mergeParagraphProps(merged, findStyleAtLevel(masterTextStyle, level));
 
-    // Level 3: master placeholder lstStyle
+    // Level 4: master placeholder lstStyle
     if (placeholder) {
       const masterPh = findPlaceholderNode(ctx.master.placeholders, placeholder);
       if (masterPh) {
@@ -570,7 +738,7 @@ export function renderTextBody(
       }
     }
 
-    // Level 4: layout placeholder lstStyle
+    // Level 5: layout placeholder lstStyle
     if (placeholder) {
       const layoutPh = findPlaceholderNode(
         ctx.layout.placeholders.map((e) => e.node),
@@ -582,10 +750,10 @@ export function renderTextBody(
       }
     }
 
-    // Level 5: shape lstStyle
+    // Level 6: shape lstStyle
     mergeParagraphProps(merged, findStyleAtLevel(textBody.listStyle, level));
 
-    // Level 6: paragraph pPr
+    // Level 7: paragraph pPr
     if (paragraph.properties) {
       mergeParagraphProps(merged, paragraph.properties);
     }
@@ -602,44 +770,56 @@ export function renderTextBody(
       paraDiv.style.textAlign = alignMap[merged.align] || 'left';
     }
     if (merged.marginLeft !== undefined) {
-      paraDiv.style.marginLeft = `${merged.marginLeft}px`;
+      paraDiv.style.paddingLeft = `${merged.marginLeft}px`;
     }
     if (merged.textIndent !== undefined) {
       paraDiv.style.textIndent = `${merged.textIndent}px`;
     }
     // Compute effective line-height (with optional lnSpcReduction from normAutofit)
-    let effectiveLineHeight = merged.lineHeight;
-    if (merged.lineHeight) {
+    let effectiveLineHeight = merged.lineHeight ?? options?.defaultLineHeight;
+    if (effectiveLineHeight) {
       if (lnSpcReduction > 0) {
-        const parsed = parseFloat(merged.lineHeight);
+        const parsed = parseFloat(effectiveLineHeight);
         if (!isNaN(parsed)) {
-          if (merged.lineHeight.includes('pt')) {
+          if (effectiveLineHeight.includes('pt')) {
             effectiveLineHeight = `${(parsed * (1 - lnSpcReduction)).toFixed(2)}pt`;
           } else {
             effectiveLineHeight = `${(parsed * (1 - lnSpcReduction)).toFixed(3)}`;
           }
         }
       }
+      if (options?.isVerticalText && !merged.lineHeightAbsolute) {
+        effectiveLineHeight = '1';
+      } else if (isSingleLineAutoFitParagraph && merged.lineHeightAbsolute) {
+        effectiveLineHeight = 'normal';
+      }
       paraDiv.style.lineHeight = effectiveLineHeight!;
     }
     // Determine effective font size for percentage-based spacing
     // Use defRPr or first run's font size, fallback to 12pt
     let effectiveFontSize = 12; // default 12pt
-    if (merged.defRPr) {
-      const sz = merged.defRPr.numAttr('sz');
-      if (sz !== undefined) effectiveFontSize = sz / 100;
-    }
+    const defaultRunStyle = getParagraphDefaultRunStyle(merged, ctx);
+    if (defaultRunStyle.fontSize !== undefined) effectiveFontSize = defaultRunStyle.fontSize;
     if (paragraph.runs.length > 0 && paragraph.runs[0].properties) {
       const sz = paragraph.runs[0].properties.numAttr('sz');
       if (sz !== undefined) effectiveFontSize = sz / 100;
     }
 
-    if (merged.spaceBefore !== undefined) {
+    const trimSpaceBefore =
+      options?.trimOuterParagraphSpacing && paragraphIndex === firstVisibleParagraphIndex;
+    const trimSpaceAfter =
+      options?.trimOuterParagraphSpacing && paragraphIndex === lastVisibleParagraphIndex;
+
+    if (trimSpaceBefore) {
+      paraDiv.style.marginTop = '0px';
+    } else if (merged.spaceBefore !== undefined) {
       paraDiv.style.marginTop = `${merged.spaceBefore}pt`;
     } else if (merged.spaceBeforePct !== undefined) {
       paraDiv.style.marginTop = `${merged.spaceBeforePct * effectiveFontSize}pt`;
     }
-    if (merged.spaceAfter !== undefined) {
+    if (trimSpaceAfter) {
+      paraDiv.style.marginBottom = '0px';
+    } else if (merged.spaceAfter !== undefined) {
       paraDiv.style.marginBottom = `${merged.spaceAfter}pt`;
     } else if (merged.spaceAfterPct !== undefined) {
       paraDiv.style.marginBottom = `${merged.spaceAfterPct * effectiveFontSize}pt`;
@@ -662,8 +842,10 @@ export function renderTextBody(
       if (merged.bulletChar) {
         bulletPrefix = merged.bulletChar;
       } else if (merged.bulletAutoNum) {
-        bulletPrefix = generateAutoNumber(merged.bulletAutoNum, bulletCounter);
-        bulletCounter++;
+        const counterKey = `${level}:${merged.bulletAutoNum}`;
+        const num = merged.bulletAutoNumStartAt ?? bulletCounters.get(counterKey) ?? 1;
+        bulletPrefix = generateAutoNumber(merged.bulletAutoNum, num);
+        bulletCounters.set(counterKey, num + 1);
       }
     }
 
@@ -673,23 +855,31 @@ export function renderTextBody(
       if (merged.bulletFont) {
         bulletSpan.style.fontFamily = merged.bulletFont;
       }
-      bulletSpan.style.fontSize = `${effectiveFontSize * fontScale}pt`;
-      // Bullet color: 1) explicit buClr from list style, 2) paragraph defRPr, 3) first run's color (so bullet matches text), 4) cell/fallback
+      const bulletFontSize = merged.bulletSizePt ?? effectiveFontSize * (merged.bulletSizePct ?? 1);
+      bulletSpan.style.fontSize = `${bulletFontSize * fontScale}pt`;
+      // Bullet color: explicit buClr > first visible run text color > inherited defaults > fallback.
       let bulletColor: string | undefined;
+      const firstVisibleRunTextColor = (): string | undefined => {
+        const firstVisibleRun = paragraph.runs.find(
+          (run) => run.text != null && run.text.length > 0,
+        );
+        if (!firstVisibleRun) return undefined;
+        const runStyle = getParagraphDefaultRunStyle(merged, ctx);
+        if (firstVisibleRun.properties) {
+          mergeRunProps(runStyle, firstVisibleRun.properties, ctx);
+        }
+        return (
+          runStyle.color ??
+          options?.fontRefColor ??
+          options?.cellTextColor ??
+          (runStyle.textNoFill ? 'transparent' : undefined)
+        );
+      };
       if (merged.bulletColorNode && merged.bulletColorNode.exists()) {
         bulletColor = resolveColorToCss(merged.bulletColorNode, ctx);
       }
-      if (bulletColor === undefined && merged.defRPr && merged.defRPr.exists()) {
-        const bulletRunStyle: MergedRunStyle = {};
-        mergeRunProps(bulletRunStyle, merged.defRPr, ctx);
-        bulletColor = bulletRunStyle.color;
-      }
-      if (bulletColor === undefined && paragraph.runs.length > 0) {
-        const runStyle: MergedRunStyle = {};
-        if (merged.defRPr) mergeRunProps(runStyle, merged.defRPr, ctx);
-        if (paragraph.runs[0].properties)
-          mergeRunProps(runStyle, paragraph.runs[0].properties, ctx);
-        bulletColor = runStyle.color;
+      if (bulletColor === undefined) {
+        bulletColor = firstVisibleRunTextColor();
       }
       // Fallback: check shape's lstStyle defRPr for color (same as run fallback)
       if (bulletColor === undefined && textBody.listStyle) {
@@ -721,7 +911,6 @@ export function renderTextBody(
     // exact spacing regardless of font metrics (CJK fonts e.g. Microsoft YaHei have
     // content areas taller than font-size, causing CSS line-height to be
     // overridden by the font's natural spacing).
-    const hasLineBreaks = paragraph.runs.some((r) => r.text === '\n');
     // Set tab-size when paragraph contains tab characters (default OOXML tab spacing = 914400 EMU = 96px)
     if (paragraph.runs.some((r) => r.text?.includes('\t'))) {
       const defaultTabPx = 96; // 914400 EMU at 96 dpi
@@ -754,11 +943,9 @@ export function renderTextBody(
       const runStyle: MergedRunStyle = {};
 
       // Apply default run properties from merged paragraph defRPr
-      if (merged.defRPr) {
-        mergeRunProps(runStyle, merged.defRPr, ctx);
-      }
+      mergeParagraphDefaultRunProps(runStyle, merged, ctx);
 
-      // Level 7: run rPr
+      // Level 8: run rPr
       if (run.properties) {
         mergeRunProps(runStyle, run.properties, ctx);
       }
@@ -836,8 +1023,8 @@ export function renderTextBody(
       // Color priority: explicit run rPr > hlink theme color > cellTextColor (table style tcTxStyle) > fontRef (shape style) > inherited styles > black default
       // cellTextColor from table style overrides inherited cascade colors but yields to explicit run/paragraph solidFill/gradFill.
       // fontRefColor overrides inherited styles but yields to explicit run solidFill/gradFill.
-      const hasExplicitRunColor =
-        run.properties?.child('solidFill').exists() || run.properties?.child('gradFill').exists();
+      const runColorKind = getRunColorKind(run.properties);
+      const hasExplicitRunColor = runColorKind !== 'none';
       let effectiveColor: string | undefined;
       if (options?.fontRefColor) {
         effectiveColor = hasExplicitRunColor ? runStyle.color : options.fontRefColor;
@@ -847,10 +1034,19 @@ export function renderTextBody(
         effectiveColor = runStyle.color;
       }
 
-      // Hyperlink default color: when the run is a hyperlink and has no explicit
-      // solidFill on its own rPr, use the theme's hlink color.  This matches
-      // PowerPoint behaviour where hyperlink text defaults to the hlink scheme color.
-      if (runStyle.hlinkClick && !hasExplicitRunColor) {
+      // Hyperlink default color: Office often writes default text fills on hyperlink
+      // runs (tx1/tx2, or the same srgb color as surrounding text) but displays
+      // those runs with the theme hlink color.
+      if (
+        shouldUseHyperlinkThemeColor(
+          run,
+          paragraph,
+          runStyle,
+          runColorKind,
+          hasExplicitRunColor,
+          ctx,
+        )
+      ) {
         const hlinkHex = ctx.theme.colorScheme.get('hlink');
         if (hlinkHex) {
           effectiveColor = hlinkHex.startsWith('#') ? hlinkHex : `#${hlinkHex}`;

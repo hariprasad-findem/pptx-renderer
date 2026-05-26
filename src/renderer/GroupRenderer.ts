@@ -7,6 +7,11 @@ import { RenderContext } from './RenderContext';
 import { BaseNodeData } from '../model/nodes/BaseNode';
 import type { ShapeNodeData } from '../model/nodes/ShapeNode';
 
+function rotationSwapsAxes(rotation: number): boolean {
+  const normalized = ((rotation % 360) + 360) % 360;
+  return Math.abs(normalized - 90) < 0.0001 || Math.abs(normalized - 270) < 0.0001;
+}
+
 // ---------------------------------------------------------------------------
 // Group Rendering
 // ---------------------------------------------------------------------------
@@ -120,14 +125,33 @@ export function renderGroup(
 
       // Remap child coordinates from child space to group space
       if (chExt.w > 0 && chExt.h > 0) {
-        childNode.position = {
-          x: ((childNode.position.x - chOff.x) / chExt.w) * groupW,
-          y: ((childNode.position.y - chOff.y) / chExt.h) * groupH,
-        };
-        childNode.size = {
-          w: (childNode.size.w / chExt.w) * groupW,
-          h: (childNode.size.h / chExt.h) * groupH,
-        };
+        const scaleX = groupW / chExt.w;
+        const scaleY = groupH / chExt.h;
+        const swapsAxes = rotationSwapsAxes(childNode.rotation);
+        const originalPosition = childNode.position;
+        const originalSize = childNode.size;
+        if (swapsAxes) {
+          const rotatedBBoxX = originalPosition.x + (originalSize.w - originalSize.h) / 2;
+          const rotatedBBoxY = originalPosition.y + (originalSize.h - originalSize.w) / 2;
+          const nextSize = {
+            w: originalSize.w * scaleY,
+            h: originalSize.h * scaleX,
+          };
+          childNode.position = {
+            x: (rotatedBBoxX - chOff.x) * scaleX - (nextSize.w - nextSize.h) / 2,
+            y: (rotatedBBoxY - chOff.y) * scaleY - (nextSize.h - nextSize.w) / 2,
+          };
+          childNode.size = nextSize;
+        } else {
+          childNode.position = {
+            x: (originalPosition.x - chOff.x) * scaleX,
+            y: (originalPosition.y - chOff.y) * scaleY,
+          };
+          childNode.size = {
+            w: originalSize.w * scaleX,
+            h: originalSize.h * scaleY,
+          };
+        }
       }
 
       // Overlap the 3 pie sectors at the same center so they form one circle
@@ -206,7 +230,7 @@ function parseGroupChild(childXml: SafeXmlNode, ctx: RenderContext): BaseNodeDat
         return parseTableNode(childXml);
       }
       if ((graphicData.attr('uri') || '').includes('chart')) {
-        return parseChartNode(childXml, ctx.slide.rels, ctx.slide.slidePath);
+        return parseChartNode(childXml, ctx.slide.rels, ctx.partPath ?? ctx.slide.slidePath ?? '');
       }
       const olePic = parseOleFrameAsPicture(childXml);
       if (olePic) return olePic;

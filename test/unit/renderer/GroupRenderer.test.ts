@@ -91,6 +91,34 @@ function makeSpXml(id = '1', name = 'Shape'): SafeXmlNode {
   `);
 }
 
+function makeRotatedSpXml(opts: {
+  id?: string;
+  name?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rot: number;
+}): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="${opts.id ?? '90'}" name="${opts.name ?? 'Rotated Shape'}"/>
+        <p:cNvSpPr/>
+        <p:nvPr/>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm rot="${opts.rot}">
+          <a:off x="${opts.x}" y="${opts.y}"/>
+          <a:ext cx="${opts.w}" cy="${opts.h}"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+      </p:spPr>
+    </p:sp>
+  `);
+}
+
 /**
  * A minimal connector (cxnSp) XML child.
  */
@@ -601,6 +629,51 @@ describe('renderGroup — child coordinate remapping', () => {
     expect(capturedNode.position.x).toBeCloseTo(-50);
     // (0 - 25) / 100 * 100 = -25
     expect(capturedNode.position.y).toBeCloseTo(-25);
+  });
+
+  it('swaps size scale axes for quarter-turn rotated children in non-uniform groups (ai-computing slide 23)', () => {
+    // 1 px = 9525 EMU. This mirrors the slide 23 group pattern:
+    // group child space is wider than the rendered group, and a 270° child uses
+    // its local height as the visible horizontal bar width after rotation.
+    const emu = (px: number) => Math.round(px * 9525);
+    const group = makeGroup(
+      [
+        makeRotatedSpXml({
+          x: emu(280),
+          y: emu(-280),
+          w: emu(40),
+          h: emu(600),
+          rot: 16200000, // 270°
+        }),
+      ],
+      {
+        x: 0,
+        y: 0,
+        w: 500,
+        h: 40,
+        childOffsetX: 0,
+        childOffsetY: 0,
+        childExtentW: 600,
+        childExtentH: 40,
+      },
+    );
+
+    let capturedNode: any;
+    const capture = (childNode: any, ctx: RenderContext): HTMLElement => {
+      capturedNode = childNode;
+      return stubRenderNode(childNode, ctx);
+    };
+
+    renderGroup(group, createMockRenderContext(), capture);
+
+    // For 270° rotation, the child's local height becomes visible width. Under
+    // the group affine transform it must use the group's X scale (500/600), not
+    // the Y scale (40/40), otherwise the rotated bar overflows into neighbours.
+    expect(capturedNode.rotation).toBe(270);
+    expect(capturedNode.position.x).toBeCloseTo(230);
+    expect(capturedNode.position.y).toBeCloseTo(-230);
+    expect(capturedNode.size.w).toBeCloseTo(40);
+    expect(capturedNode.size.h).toBeCloseTo(500);
   });
 
   it('skips coordinate remapping when childExtent is 0 in either dimension', () => {

@@ -80,40 +80,48 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
 
   // ---- Resolve image data ----
   const embedId = node.blipEmbed;
-  if (!embedId) {
+  let url: string | undefined;
+
+  if (embedId) {
+    const rel = ctx.slide.rels.get(embedId);
+    if (!rel) {
+      renderPlaceholder(wrapper, 'Missing image reference');
+      return wrapper;
+    }
+
+    const mediaPath = resolveMediaPath(rel.target);
+
+    // Check for unsupported formats (WMF)
+    if (isUnsupportedFormat(mediaPath)) {
+      renderUnsupportedPlaceholder(wrapper, mediaPath);
+      return wrapper;
+    }
+
+    const data = ctx.presentation.media.get(mediaPath);
+    if (!data) {
+      renderPlaceholder(wrapper, 'Image not found');
+      return wrapper;
+    }
+
+    // Handle EMF images — extract embedded PDF/bitmap content
+    if (isEmfFormat(mediaPath)) {
+      const emfData = data instanceof Uint8Array ? data : new Uint8Array(data);
+      renderEmf(emfData, node, ctx, wrapper, mediaPath);
+      return wrapper;
+    }
+
+    // Create blob URL (with caching)
+    url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
+  } else if (node.blipLink) {
+    url = resolveMediaUrl(node.blipLink, ctx);
+    if (!url) {
+      renderPlaceholder(wrapper, 'Image not found');
+      return wrapper;
+    }
+  } else {
     renderPlaceholder(wrapper, 'No image data');
     return wrapper;
   }
-
-  const rel = ctx.slide.rels.get(embedId);
-  if (!rel) {
-    renderPlaceholder(wrapper, 'Missing image reference');
-    return wrapper;
-  }
-
-  const mediaPath = resolveMediaPath(rel.target);
-
-  // Check for unsupported formats (WMF)
-  if (isUnsupportedFormat(mediaPath)) {
-    renderUnsupportedPlaceholder(wrapper, mediaPath);
-    return wrapper;
-  }
-
-  const data = ctx.presentation.media.get(mediaPath);
-  if (!data) {
-    renderPlaceholder(wrapper, 'Image not found');
-    return wrapper;
-  }
-
-  // Handle EMF images — extract embedded PDF/bitmap content
-  if (isEmfFormat(mediaPath)) {
-    const emfData = data instanceof Uint8Array ? data : new Uint8Array(data);
-    renderEmf(emfData, node, ctx, wrapper, mediaPath);
-    return wrapper;
-  }
-
-  // Create blob URL (with caching)
-  const url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
 
   // Create image element
   const img = document.createElement('img');

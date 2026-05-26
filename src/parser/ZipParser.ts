@@ -17,9 +17,11 @@ export interface PptxFiles {
   slideMasters: Map<string, string>;
   slideMasterRels: Map<string, string>;
   themes: Map<string, string>;
+  themeOverrides?: Map<string, string>;
   media: Map<string, Uint8Array>;
   tableStyles?: string;
   charts: Map<string, string>; // ppt/charts/chart*.xml
+  chartRels?: Map<string, string>; // ppt/charts/_rels/chart*.xml.rels
   chartStyles: Map<string, string>; // ppt/charts/style*.xml
   chartColors: Map<string, string>; // ppt/charts/colors*.xml
   diagramDrawings: Map<string, string>; // ppt/diagrams/drawing*.xml (SmartArt fallback)
@@ -231,8 +233,10 @@ export async function parseZip(
     slideMasters: new Map(),
     slideMasterRels: new Map(),
     themes: new Map(),
+    themeOverrides: new Map(),
     media: new Map(),
     charts: new Map(),
+    chartRels: new Map(),
     chartStyles: new Map(),
     chartColors: new Map(),
     diagramDrawings: new Map(),
@@ -335,6 +339,24 @@ export async function parseZip(
     // --- Themes ---
     if (/^ppt\/theme\/theme\d+\.xml$/.test(normalizedPath)) {
       result.themes.set(normalizedPath, await readZipTextEntry(normalizedPath, file, limitState));
+      return;
+    }
+
+    // --- Theme Overrides (used by chart parts) ---
+    if (/^ppt\/theme\/themeOverride\d+\.xml$/.test(normalizedPath)) {
+      result.themeOverrides?.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
+      return;
+    }
+
+    // --- Chart Rels ---
+    if (/^ppt\/charts\/_rels\/chart\d+\.xml\.rels$/.test(normalizedPath)) {
+      result.chartRels?.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 

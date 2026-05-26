@@ -200,6 +200,69 @@ describe('renderSlide', () => {
     expect(el.children.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('resolves grouped layout chart relationships relative to the layout part path', () => {
+    const pres = makeMinimalPres();
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.layouts.get(layoutPath)!.spTree = parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:grpSp>
+          <p:nvGrpSpPr>
+            <p:cNvPr id="10" name="Layout Group"/>
+            <p:cNvGrpSpPr/>
+            <p:nvPr/>
+          </p:nvGrpSpPr>
+          <p:grpSpPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="3000000" cy="2000000"/>
+              <a:chOff x="0" y="0"/>
+              <a:chExt cx="3000000" cy="2000000"/>
+            </a:xfrm>
+          </p:grpSpPr>
+          <p:graphicFrame>
+            <p:nvGraphicFramePr>
+              <p:cNvPr id="11" name="Layout Chart"/>
+              <p:cNvGraphicFramePr/>
+              <p:nvPr/>
+            </p:nvGraphicFramePr>
+            <p:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></p:xfrm>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                <c:chart r:id="rIdChart"/>
+              </a:graphicData>
+            </a:graphic>
+          </p:graphicFrame>
+        </p:grpSp>
+      </p:spTree>
+    `);
+    pres.layouts.get(layoutPath)!.rels.set('rIdChart', {
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart',
+      target: 'charts/chart1.xml',
+    });
+    pres.charts.set(
+      'ppt/slideLayouts/charts/chart1.xml',
+      parseXml(`
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+          <c:chart><c:plotArea/></c:chart>
+        </c:chartSpace>
+      `),
+    );
+
+    const slide: SlideData = {
+      index: 0,
+      nodes: [],
+      rels: new Map(),
+      slidePath: 'ppt/slides/slide1.xml',
+      showMasterSp: true,
+    };
+    const { element: el } = renderSlide(pres, slide);
+
+    expect(el.textContent).not.toContain('Chart not found');
+  });
+
   it('skips placeholder shapes from master/layout spTree', () => {
     const pres = makeMinimalPres();
     const masterSpTree = parseXml(`

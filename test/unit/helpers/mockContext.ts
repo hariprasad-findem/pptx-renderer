@@ -35,6 +35,7 @@ export function createMockRenderContext(
     majorFont: { latin: 'Calibri', ea: '', cs: '' },
     minorFont: { latin: 'Calibri', ea: '', cs: '' },
     fillStyles: [],
+    bgFillStyles: [],
     lineStyles: [],
     effectStyles: [],
   };

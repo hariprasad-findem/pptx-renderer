@@ -25,7 +25,11 @@ export interface PresentationData {
   masterToTheme: Map<string, string>;
   media: Map<string, Uint8Array>;
   tableStyles?: SafeXmlNode;
+  /** Presentation-wide default text style from ppt/presentation.xml. */
+  defaultTextStyle?: SafeXmlNode;
   charts: Map<string, SafeXmlNode>;
+  /** Chart-local theme overrides keyed by chart part path. */
+  chartThemes?: Map<string, ThemeData>;
   isWps: boolean;
 }
 
@@ -122,6 +126,9 @@ export function buildPresentation(files: PptxFiles): PresentationData {
   // --- WPS detection ---
   const isWps = detectWps(files.presentation);
 
+  // --- Presentation default text style ---
+  const defaultTextStyle = presRoot.child('defaultTextStyle');
+
   // --- Parse themes ---
   const themes = new Map<string, ThemeData>();
   for (const [themePath, themeXml] of files.themes) {
@@ -177,10 +184,26 @@ export function buildPresentation(files: PptxFiles): PresentationData {
 
   // --- Parse charts ---
   const charts = new Map<string, SafeXmlNode>();
+  const chartThemes = new Map<string, ThemeData>();
   for (const [chartPath, chartXml] of files.charts) {
     const chartRoot = parseXml(chartXml);
     if (chartRoot.exists()) {
       charts.set(chartPath, chartRoot);
+    }
+
+    const chartRelsPath = relsPathFor(chartPath);
+    const chartRelsXml = files.chartRels?.get(chartRelsPath);
+    if (!chartRelsXml) continue;
+    const chartRels = parseRels(chartRelsXml);
+    const themeOverrideRel = findRelByType(chartRels, 'themeOverride');
+    if (!themeOverrideRel) continue;
+    const themeOverridePath = resolveRelTarget(basePath(chartPath), themeOverrideRel.target);
+    const themeOverrideXml =
+      files.themeOverrides?.get(themeOverridePath) ?? files.themes.get(themeOverridePath);
+    if (!themeOverrideXml) continue;
+    const themeOverrideRoot = parseXml(themeOverrideXml);
+    if (themeOverrideRoot.exists()) {
+      chartThemes.set(chartPath, parseTheme(themeOverrideRoot));
     }
   }
 
@@ -274,7 +297,9 @@ export function buildPresentation(files: PptxFiles): PresentationData {
     masterToTheme,
     media: files.media,
     tableStyles,
+    defaultTextStyle: defaultTextStyle.exists() ? defaultTextStyle : undefined,
     charts,
+    chartThemes,
     isWps,
   };
 

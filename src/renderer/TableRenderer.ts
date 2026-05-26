@@ -11,12 +11,24 @@
 
 import { TableNodeData, TableCell } from '../model/nodes/TableNode';
 import { RenderContext } from './RenderContext';
-import { resolveColor, resolveLineStyle } from './StyleResolver';
+import { resolveColor, resolveLineStyle, resolveThemeFillReference } from './StyleResolver';
 import { renderTextBody } from './TextRenderer';
 import { emuToPx } from '../parser/units';
 import { hexToRgb } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { getPredefinedTableStyle } from './predefinedTableStyles';
+
+function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
+  if (
+    fillCss.includes('gradient') ||
+    fillCss.startsWith('url(') ||
+    fillCss.includes('repeating-')
+  ) {
+    el.style.background = fillCss;
+  } else {
+    el.style.backgroundColor = fillCss;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Table Style Lookup
@@ -241,15 +253,8 @@ function applyStyleFill(td: HTMLElement, tcStyle: SafeXmlNode, ctx: RenderContex
   // fillRef (theme fill reference)
   const fillRef = fill.child('fillRef');
   if (fillRef.exists()) {
-    // fillRef contains a color child + idx attribute
-    const { color, alpha } = resolveColor(fillRef, ctx);
-    const hex = color.startsWith('#') ? color : `#${color}`;
-    if (alpha < 1) {
-      const { r, g, b } = hexToRgb(hex);
-      td.style.backgroundColor = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
-    } else {
-      td.style.backgroundColor = hex;
-    }
+    const { fillCss } = resolveThemeFillReference(fillRef, ctx);
+    applyCssFillBackground(td, fillCss);
     return true;
   }
 
@@ -362,14 +367,8 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
   // fillRef: references a theme fill style with a color override
   const fillRef = tblBg.child('fillRef');
   if (fillRef.exists()) {
-    const { color, alpha } = resolveColor(fillRef, ctx);
-    const hex = color.startsWith('#') ? color : `#${color}`;
-    if (alpha < 1) {
-      const { r, g, b } = hexToRgb(hex);
-      table.style.backgroundColor = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
-    } else {
-      table.style.backgroundColor = hex;
-    }
+    const { fillCss } = resolveThemeFillReference(fillRef, ctx);
+    applyCssFillBackground(table, fillCss);
     return;
   }
 
@@ -505,14 +504,17 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
 
       // Render text inside cell
       if (cell.textBody) {
-        const opts = textProps
-          ? {
-              cellTextColor: textProps.color,
-              cellTextBold: textProps.bold,
-              cellTextItalic: textProps.italic,
-              cellTextFontFamily: textProps.fontFamily,
-            }
-          : undefined;
+        const opts = {
+          defaultLineHeight: '1',
+          ...(textProps
+            ? {
+                cellTextColor: textProps.color,
+                cellTextBold: textProps.bold,
+                cellTextItalic: textProps.italic,
+                cellTextFontFamily: textProps.fontFamily,
+              }
+            : {}),
+        };
         renderTextBody(cell.textBody, undefined, ctx, td, opts);
       }
 

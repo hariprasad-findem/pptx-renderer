@@ -9,6 +9,7 @@ export interface ThemeData {
   majorFont: { latin: string; ea: string; cs: string };
   minorFont: { latin: string; ea: string; cs: string };
   fillStyles: SafeXmlNode[]; // from a:fillStyleLst children (indexed 1-based)
+  bgFillStyles?: SafeXmlNode[]; // from a:bgFillStyleLst children (indexed 1001-based for bgRef)
   lineStyles: SafeXmlNode[]; // from a:lnStyleLst children (indexed 1-based)
   effectStyles: SafeXmlNode[]; // from a:effectStyleLst children (indexed 1-based)
 }
@@ -62,9 +63,10 @@ function parseFontInfo(fontNode: SafeXmlNode): { latin: string; ea: string; cs: 
  */
 export function parseTheme(root: SafeXmlNode): ThemeData {
   const themeElements = root.child('themeElements');
+  const themeScope = themeElements.exists() ? themeElements : root;
 
   // --- Color scheme ---
-  const clrScheme = themeElements.child('clrScheme');
+  const clrScheme = themeScope.child('clrScheme');
   const colorScheme = new Map<string, string>();
 
   for (const slot of COLOR_SLOTS) {
@@ -78,18 +80,20 @@ export function parseTheme(root: SafeXmlNode): ThemeData {
   }
 
   // --- Font scheme ---
-  const fontScheme = themeElements.child('fontScheme');
+  const fontScheme = themeScope.child('fontScheme');
   const majorFont = parseFontInfo(fontScheme.child('majorFont'));
   const minorFont = parseFontInfo(fontScheme.child('minorFont'));
 
   // --- Format scheme ---
-  const fmtScheme = themeElements.child('fmtScheme');
+  const fmtScheme = themeScope.child('fmtScheme');
   const fillStyleLst = fmtScheme.child('fillStyleLst');
   const fillStyles: SafeXmlNode[] = fillStyleLst.allChildren();
+  const bgFillStyleLst = fmtScheme.child('bgFillStyleLst');
+  const bgFillStyles: SafeXmlNode[] = bgFillStyleLst.allChildren();
   const lnStyleLst = fmtScheme.child('lnStyleLst');
   const lineStyles: SafeXmlNode[] = lnStyleLst.allChildren();
   const effectStyleLst = fmtScheme.child('effectStyleLst');
   const effectStyles: SafeXmlNode[] = effectStyleLst.allChildren();
 
-  return { colorScheme, majorFont, minorFont, fillStyles, lineStyles, effectStyles };
+  return { colorScheme, majorFont, minorFont, fillStyles, bgFillStyles, lineStyles, effectStyles };
 }

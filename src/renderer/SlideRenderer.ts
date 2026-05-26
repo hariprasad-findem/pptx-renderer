@@ -15,9 +15,10 @@ import { ShapeNodeData, parseShapeNode } from '../model/nodes/ShapeNode';
 import { PicNodeData, parsePicNode } from '../model/nodes/PicNode';
 import { TableNodeData, parseTableNode } from '../model/nodes/TableNode';
 import { GroupNodeData, parseGroupNode } from '../model/nodes/GroupNode';
-import { ChartNodeData } from '../model/nodes/ChartNode';
+import { ChartNodeData, parseChartNode } from '../model/nodes/ChartNode';
 import { BaseNodeData } from '../model/nodes/BaseNode';
 import { SafeXmlNode } from '../parser/XmlParser';
+import type { RelEntry } from '../parser/RelParser';
 import type { ECharts } from 'echarts';
 
 // ---------------------------------------------------------------------------
@@ -140,7 +141,12 @@ function isPlaceholderNode(node: SafeXmlNode): boolean {
  * Placeholder shapes are never rendered from master/layout — they only serve
  * as position/size inheritance templates.
  */
-function parseTemplateShapes(spTree: SafeXmlNode, _slideNodes: BaseNodeData[]): BaseNodeData[] {
+function parseTemplateShapes(
+  spTree: SafeXmlNode,
+  _slideNodes: BaseNodeData[],
+  rels?: Map<string, RelEntry>,
+  partPath?: string,
+): BaseNodeData[] {
   const nodes: BaseNodeData[] = [];
   if (!spTree || !spTree.exists || !spTree.exists()) return nodes;
 
@@ -168,6 +174,8 @@ function parseTemplateShapes(spTree: SafeXmlNode, _slideNodes: BaseNodeData[]): 
           const graphicData = graphic.child('graphicData');
           if (graphicData.child('tbl').exists()) {
             node = parseTableNode(child);
+          } else if ((graphicData.attr('uri') || '').includes('chart') && rels && partPath) {
+            node = parseChartNode(child, rels, partPath);
           }
           break;
         }
@@ -202,14 +210,10 @@ export function renderSlide(
   options?: SlideRendererOptions,
 ): SlideHandle {
   const isSharedCache = !!options?.mediaUrlCache;
+  const chartInstances = options?.chartInstances ?? new Set<ECharts>();
 
   // Create render context (resolves slide -> layout -> master -> theme chain)
-  const ctx = createRenderContext(
-    presentation,
-    slide,
-    options?.mediaUrlCache,
-    options?.chartInstances,
-  );
+  const ctx = createRenderContext(presentation, slide, options?.mediaUrlCache, chartInstances);
   if (options?.onNavigate) {
     ctx.onNavigate = options.onNavigate;
   }
@@ -237,8 +241,14 @@ export function renderSlide(
     const masterCtx: RenderContext = {
       ...ctx,
       slide: { ...ctx.slide, rels: ctx.master.rels },
+      partPath: ctx.masterPath,
     };
-    const masterShapes = parseTemplateShapes(ctx.master.spTree, slide.nodes);
+    const masterShapes = parseTemplateShapes(
+      ctx.master.spTree,
+      slide.nodes,
+      ctx.master.rels,
+      ctx.masterPath,
+    );
     for (const node of masterShapes) {
       try {
         const el = renderNode(node, masterCtx);
@@ -254,8 +264,14 @@ export function renderSlide(
     const layoutCtx: RenderContext = {
       ...ctx,
       slide: { ...ctx.slide, rels: ctx.layout.rels },
+      partPath: ctx.layoutPath,
     };
-    const layoutShapes = parseTemplateShapes(ctx.layout.spTree, slide.nodes);
+    const layoutShapes = parseTemplateShapes(
+      ctx.layout.spTree,
+      slide.nodes,
+      ctx.layout.rels,
+      ctx.layoutPath,
+    );
     for (const node of layoutShapes) {
       try {
         const el = renderNode(node, layoutCtx);
@@ -279,7 +295,6 @@ export function renderSlide(
 
   // Build SlideHandle
   let disposed = false;
-  const chartInstances = options?.chartInstances;
   const mediaUrlCache = ctx.mediaUrlCache;
 
   const dispose = (): void => {

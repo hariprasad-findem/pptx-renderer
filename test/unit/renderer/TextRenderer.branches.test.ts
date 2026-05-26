@@ -9,18 +9,22 @@ import { createMockRenderContext } from '../helpers/mockContext';
 import { xmlNode } from '../helpers/xmlNode';
 import type { TextBody, TextParagraph, TextRun } from '../../../src/model/nodes/ShapeNode';
 
-function makeTextBody(opts: {
-  paragraphs?: TextParagraph[];
-  bodyPr?: string;
-  listStyle?: string;
-} = {}): TextBody {
+function makeTextBody(
+  opts: {
+    paragraphs?: TextParagraph[];
+    bodyPr?: string;
+    listStyle?: string;
+  } = {},
+): TextBody {
   return {
     bodyProperties: opts.bodyPr ? xmlNode(opts.bodyPr) : undefined,
     listStyle: opts.listStyle ? xmlNode(opts.listStyle) : undefined,
-    paragraphs: opts.paragraphs ?? [{
-      runs: [{ text: 'Test' }],
-      level: 0,
-    }],
+    paragraphs: opts.paragraphs ?? [
+      {
+        runs: [{ text: 'Test' }],
+        level: 0,
+      },
+    ],
   };
 }
 
@@ -38,11 +42,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('gradient text fill (gradFill on rPr)', () => {
     it('applies text gradient fill with background-clip', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Gradient Text',
-            properties: xmlNode(
-              `<rPr>
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Gradient Text',
+                properties: xmlNode(
+                  `<rPr>
                 <gradFill>
                   <gsLst>
                     <gs pos="0"><srgbClr val="FF0000"/></gs>
@@ -51,10 +57,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
                   <lin ang="0" scaled="0"/>
                 </gradFill>
               </rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -65,11 +73,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies gradient fill with multiple color stops', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Multi-stop gradient',
-            properties: xmlNode(
-              `<rPr>
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Multi-stop gradient',
+                properties: xmlNode(
+                  `<rPr>
                 <gradFill>
                   <gsLst>
                     <gs pos="0"><srgbClr val="FF0000"/></gs>
@@ -79,10 +89,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
                   <lin ang="5400000" scaled="0"/>
                 </gradFill>
               </rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -97,19 +109,23 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('text outline with gradient (textOutlineGradientCss)', () => {
     it('applies text outline with gradient fill', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Gradient Outline',
-            properties: xmlNode(
-              `<rPr>
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Gradient Outline',
+                properties: xmlNode(
+                  `<rPr>
                 <ln w="25400">
                   <solidFill><srgbClr val="FF0000"/></solidFill>
                 </ln>
               </rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -119,11 +135,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies ghost text with gradient outline', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Ghost Gradient',
-            properties: xmlNode(
-              `<rPr>
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Ghost Gradient',
+                properties: xmlNode(
+                  `<rPr>
                 <noFill/>
                 <ln w="25400">
                   <gradFill>
@@ -135,10 +153,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
                   </gradFill>
                 </ln>
               </rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -151,34 +171,39 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   // Paragraph indent (marL, indent)
   // ============================================================================
   describe('paragraph indent (marL, indent)', () => {
-    it('applies both margin-left and text-indent', () => {
+    it('applies internal padding and text-indent', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(
-            `<pPr marL="914400" indent="-457200"/>`,
-          ),
-          runs: [{ text: 'Hanging indent' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr marL="914400" indent="-457200"/>`),
+            runs: [{ text: 'Hanging indent' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      expect(parseFloat(para.style.marginLeft)).toBeGreaterThan(0);
+      expect(parseFloat(para.style.paddingLeft)).toBeGreaterThan(0);
+      expect(para.style.marginLeft).toBe('');
+      expect(para.style.boxSizing).toBe('border-box');
       expect(parseFloat(para.style.textIndent)).toBeLessThan(0);
     });
 
-    it('applies large margin-left with hanging indent', () => {
+    it('applies large internal padding with hanging indent', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr marL="2286000" indent="-228600"/>`),
-          runs: [{ text: 'Deeply indented' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr marL="2286000" indent="-228600"/>`),
+            runs: [{ text: 'Deeply indented' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
       // 2286000 EMU ≈ 240px
-      expect(parseFloat(para.style.marginLeft)).toBeGreaterThan(200);
+      expect(parseFloat(para.style.paddingLeft)).toBeGreaterThan(200);
+      expect(para.style.marginLeft).toBe('');
     });
   });
 
@@ -232,10 +257,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
     it('renders very long text without breaking', () => {
       const longText = 'A'.repeat(200);
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: longText }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: longText }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toHaveLength(200);
@@ -249,11 +276,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('vertical text anchoring via style inheritance', () => {
     it('preserves paragraph properties through inheritance chain', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr algn="dist"/>`),
-          runs: [{ text: 'Distributed' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr algn="dist"/>`),
+            runs: [{ text: 'Distributed' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -268,13 +297,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
     it('applies spAutoFit scaling (shape auto-fit)', () => {
       const body = makeTextBody({
         bodyPr: `<bodyPr><spAutoFit/></bodyPr>`,
-        paragraphs: [{
-          runs: [{
-            text: 'Auto-fit',
-            properties: xmlNode(`<rPr sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Auto-fit',
+                properties: xmlNode(`<rPr sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -285,13 +318,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
     it('applies font scale > 100% from normAutofit', () => {
       const body = makeTextBody({
         bodyPr: `<bodyPr><normAutofit fontScale="110000"/></bodyPr>`,
-        paragraphs: [{
-          runs: [{
-            text: 'Scaled up',
-            properties: xmlNode(`<rPr sz="2000"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Scaled up',
+                properties: xmlNode(`<rPr sz="2000"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -302,13 +339,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
     it('applies font scale < 100% from normAutofit', () => {
       const body = makeTextBody({
         bodyPr: `<bodyPr><normAutofit fontScale="50000"/></bodyPr>`,
-        paragraphs: [{
-          runs: [{
-            text: 'Scaled down',
-            properties: xmlNode(`<rPr sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Scaled down',
+                properties: xmlNode(`<rPr sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -323,18 +364,21 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   // but test inheritance pathways
   // ============================================================================
   describe('text margins via paragraph properties', () => {
-    it('applies margin-left from nested marL', () => {
+    it('applies internal padding from nested marL', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr marL="1828800"/>`),
-          runs: [{ text: 'Indented paragraph' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr marL="1828800"/>`),
+            runs: [{ text: 'Indented paragraph' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
       // 1828800 EMU ≈ 192px
-      expect(parseFloat(para.style.marginLeft)).toBeGreaterThan(100);
+      expect(parseFloat(para.style.paddingLeft)).toBeGreaterThan(100);
+      expect(para.style.marginLeft).toBe('');
     });
   });
 
@@ -347,10 +391,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
         listStyle: `<lstStyle>
           <lvl1pPr><pPr algn="ctr"/></lvl1pPr>
         </lstStyle>`,
-        paragraphs: [{
-          runs: [{ text: 'With listStyle' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'With listStyle' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body);
@@ -362,11 +408,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
         listStyle: `<lstStyle>
           <lvl1pPr><pPr algn="ctr"/></lvl1pPr>
         </lstStyle>`,
-        paragraphs: [{
-          properties: xmlNode(`<pPr algn="r"/>`),
-          runs: [{ text: 'Paragraph override' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr algn="r"/>`),
+            runs: [{ text: 'Paragraph override' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body);
@@ -382,13 +430,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('run color resolution with fallback chain', () => {
     it('uses explicit run solidFill color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Explicit color',
-            properties: xmlNode(`<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Explicit color',
+                properties: xmlNode(`<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -397,15 +449,19 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('falls back to defRPr color when run has no color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(
-            `<pPr><defRPr><solidFill><srgbClr val="FF0000"/></solidFill></defRPr></pPr>`,
-          ),
-          runs: [{
-            text: 'Inherited from defRPr',
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(
+              `<pPr><defRPr><solidFill><srgbClr val="FF0000"/></solidFill></defRPr></pPr>`,
+            ),
+            runs: [
+              {
+                text: 'Inherited from defRPr',
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -419,13 +475,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
             <defRPr><solidFill><srgbClr val="0000FF"/></solidFill></defRPr>
           </lvl1pPr>
         </lstStyle>`,
-        paragraphs: [{
-          properties: xmlNode(`<pPr><defRPr/></pPr>`),
-          runs: [{
-            text: 'lstStyle fallback',
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><defRPr/></pPr>`),
+            runs: [
+              {
+                text: 'lstStyle fallback',
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -440,13 +500,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('strike-through text', () => {
     it('applies line-through for sngStrike', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Struck',
-            properties: xmlNode(`<rPr strike="sngStrike"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Struck',
+                properties: xmlNode(`<rPr strike="sngStrike"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -455,13 +519,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('removes strike-through with noStrike', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Not struck',
-            properties: xmlNode(`<rPr strike="noStrike"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Not struck',
+                properties: xmlNode(`<rPr strike="noStrike"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -470,13 +538,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('combines underline and strike-through', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Underlined and struck',
-            properties: xmlNode(`<rPr u="sng" strike="sngStrike"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Underlined and struck',
+                properties: xmlNode(`<rPr u="sng" strike="sngStrike"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -491,13 +563,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('character spacing and kerning', () => {
     it('applies positive character spacing', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Spaced',
-            properties: xmlNode(`<rPr spc="500"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Spaced',
+                properties: xmlNode(`<rPr spc="500"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -506,13 +582,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies kerning for large font sizes', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Kerned',
-            properties: xmlNode(`<rPr kern="1200" sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Kerned',
+                properties: xmlNode(`<rPr kern="1200" sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -522,13 +602,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('disables kerning for small font sizes', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'No kern',
-            properties: xmlNode(`<rPr kern="1200" sz="1000"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'No kern',
+                properties: xmlNode(`<rPr kern="1200" sz="1000"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -538,13 +622,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies kern="0" to always enable kerning', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Always kern',
-            properties: xmlNode(`<rPr kern="0" sz="800"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Always kern',
+                properties: xmlNode(`<rPr kern="0" sz="800"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -559,13 +647,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('bullet variations', () => {
     it('applies bullet font from buFont', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(
-            `<pPr><buChar char="●"/><buFont typeface="Wingdings"/></pPr>`,
-          ),
-          runs: [{ text: 'Windings bullet' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buChar char="●"/><buFont typeface="Wingdings"/></pPr>`),
+            runs: [{ text: 'Windings bullet' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const bulletSpan = container.querySelector('span');
@@ -575,13 +663,15 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('renders bullet with explicit color from buClr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(
-            `<pPr><buChar char="►"/><buClr><srgbClr val="FF0000"/></buClr></pPr>`,
-          ),
-          runs: [{ text: 'Red bullet' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(
+              `<pPr><buChar char="►"/><buClr><srgbClr val="FF0000"/></buClr></pPr>`,
+            ),
+            runs: [{ text: 'Red bullet' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const bulletSpan = container.querySelector('span');
@@ -628,13 +718,35 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       expect(container.textContent).toContain('ii.');
     });
 
+    it('honors buAutoNum startAt and continues numbering from that value', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod" startAt="5"/></pPr>`),
+            runs: [{ text: 'Fifth' }],
+            level: 0,
+          },
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: 'Sixth' }],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      expect(container.textContent).toContain('5.');
+      expect(container.textContent).toContain('6.');
+    });
+
     it('applies alphaUcParenR auto-numbering', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="alphaUcParenR"/></pPr>`),
-          runs: [{ text: 'Alpha' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="alphaUcParenR"/></pPr>`),
+            runs: [{ text: 'Alpha' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('A)');
@@ -642,11 +754,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for empty paragraphs', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).not.toContain('1.');
@@ -654,11 +768,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for title placeholder', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [{ text: 'Title text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: 'Title text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'title' });
       expect(container.textContent).not.toContain('1.');
@@ -666,11 +782,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for metadata placeholders (sldNum)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [{ text: '1' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: '1' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'sldNum' });
       expect(container.textContent).not.toContain('1.');
@@ -679,11 +797,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for date placeholder (dt)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [{ text: '2024-01-01' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: '2024-01-01' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'dt' });
       expect(container.textContent).not.toContain('1.');
@@ -691,11 +811,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for footer placeholder (ftr)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [{ text: 'Footer text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: 'Footer text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'ftr' });
       expect(container.textContent).not.toContain('1.');
@@ -703,11 +825,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('suppresses bullets for centered title placeholder (ctrTitle)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
-          runs: [{ text: 'Centered' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPeriod"/></pPr>`),
+            runs: [{ text: 'Centered' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'ctrTitle' });
       expect(container.textContent).not.toContain('1.');
@@ -802,36 +926,30 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('line breaks with absolute line spacing', () => {
     it('uses line wrappers when spcPts and line breaks are present', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><lnSpc><spcPts val="2400"/></lnSpc></pPr>`),
-          runs: [
-            { text: 'Line 1' },
-            { text: '\n' },
-            { text: 'Line 2' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><lnSpc><spcPts val="2400"/></lnSpc></pPr>`),
+            runs: [{ text: 'Line 1' }, { text: '\n' }, { text: 'Line 2' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
       // Should have nested divs for line wrappers
-      const divChildren = Array.from(para.children).filter(
-        (el) => el.tagName === 'DIV',
-      );
+      const divChildren = Array.from(para.children).filter((el) => el.tagName === 'DIV');
       expect(divChildren.length).toBeGreaterThan(0);
     });
 
     it('does not use line wrappers when spcPct is used', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><lnSpc><spcPct val="120000"/></lnSpc></pPr>`),
-          runs: [
-            { text: 'Line 1' },
-            { text: '\n' },
-            { text: 'Line 2' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><lnSpc><spcPct val="120000"/></lnSpc></pPr>`),
+            runs: [{ text: 'Line 1' }, { text: '\n' }, { text: 'Line 2' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const br = container.querySelector('br');
@@ -840,23 +958,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('handles multiple consecutive line breaks with absolute spacing', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><lnSpc><spcPts val="1800"/></lnSpc></pPr>`),
-          runs: [
-            { text: 'A' },
-            { text: '\n' },
-            { text: 'B' },
-            { text: '\n' },
-            { text: 'C' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><lnSpc><spcPts val="1800"/></lnSpc></pPr>`),
+            runs: [{ text: 'A' }, { text: '\n' }, { text: 'B' }, { text: '\n' }, { text: 'C' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      const divChildren = Array.from(para.children).filter(
-        (el) => el.tagName === 'DIV',
-      );
+      const divChildren = Array.from(para.children).filter((el) => el.tagName === 'DIV');
       expect(divChildren.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -867,13 +979,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('east asian and complex script fonts', () => {
     it('resolves +mn-ea to theme minor font (east asian)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'East Asian',
-            properties: xmlNode(`<rPr><ea typeface="+mn-ea"/></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'East Asian',
+                properties: xmlNode(`<rPr><ea typeface="+mn-ea"/></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -882,13 +998,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('resolves +mn-cs to theme minor font (complex script)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Complex script',
-            properties: xmlNode(`<rPr><cs typeface="+mn-cs"/></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Complex script',
+                properties: xmlNode(`<rPr><cs typeface="+mn-cs"/></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -897,13 +1017,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('falls back to ea when latin is not specified', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'EA fallback',
-            properties: xmlNode(`<rPr><ea typeface="Microsoft YaHei"/></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'EA fallback',
+                properties: xmlNode(`<rPr><ea typeface="Microsoft YaHei"/></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -912,13 +1036,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('falls back to cs when neither latin nor ea specified', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'CS fallback',
-            properties: xmlNode(`<rPr><cs typeface="Devanagari"/></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'CS fallback',
+                properties: xmlNode(`<rPr><cs typeface="Devanagari"/></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -932,13 +1060,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('text outline with no fill', () => {
     it('applies outline without interior fill', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Outline only',
-            properties: xmlNode(`<rPr><ln w="25400"><noFill/></ln></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Outline only',
+                properties: xmlNode(`<rPr><ln w="25400"><noFill/></ln></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -953,18 +1085,22 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('ghost text with outline variations', () => {
     it('applies ghost text with solid outline color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Ghost solid outline',
-            properties: xmlNode(
-              `<rPr>
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Ghost solid outline',
+                properties: xmlNode(
+                  `<rPr>
                 <noFill/>
                 <ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln>
               </rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -974,13 +1110,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies pure ghost text (noFill without outline)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Invisible',
-            properties: xmlNode(`<rPr><noFill/></rPr>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Invisible',
+                properties: xmlNode(`<rPr><noFill/></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -994,13 +1134,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('superscript and subscript with font scaling', () => {
     it('reduces font size for superscript with large shift', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'x',
-            properties: xmlNode(`<rPr baseline="50000" sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'x',
+                properties: xmlNode(`<rPr baseline="50000" sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1012,13 +1156,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('reduces font size for subscript with large negative shift', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'y',
-            properties: xmlNode(`<rPr baseline="-30000" sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'y',
+                properties: xmlNode(`<rPr baseline="-30000" sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1029,13 +1177,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('does not reduce font size for small baseline shift', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'z',
-            properties: xmlNode(`<rPr baseline="10000" sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'z',
+                properties: xmlNode(`<rPr baseline="10000" sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1046,13 +1198,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies baseline=0 (no shift)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'normal',
-            properties: xmlNode(`<rPr baseline="0" sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'normal',
+                properties: xmlNode(`<rPr baseline="0" sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1067,11 +1223,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('paragraph spacing with percentage', () => {
     it('applies percentage-based space before', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><spcBef><spcPct val="100000"/></spcBef></pPr>`),
-          runs: [{ text: 'Text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><spcBef><spcPct val="100000"/></spcBef></pPr>`),
+            runs: [{ text: 'Text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -1081,11 +1239,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies percentage-based space after', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><spcAft><spcPct val="200000"/></spcAft></pPr>`),
-          runs: [{ text: 'Text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><spcAft><spcPct val="200000"/></spcAft></pPr>`),
+            runs: [{ text: 'Text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -1100,15 +1260,19 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('text colors with alpha transparency', () => {
     it('applies color with transparency modifier', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Transparent',
-            properties: xmlNode(
-              `<rPr><solidFill><srgbClr val="FF0000"><alphaModFix val="50000"/></srgbClr></solidFill></rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Transparent',
+                properties: xmlNode(
+                  `<rPr><solidFill><srgbClr val="FF0000"><alphaModFix val="50000"/></srgbClr></solidFill></rPr>`,
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1125,13 +1289,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('underline styles', () => {
     it('removes underline for u="none"', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Not underlined',
-            properties: xmlNode(`<rPr u="none"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Not underlined',
+                properties: xmlNode(`<rPr u="none"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1140,13 +1308,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies underline for u="dbl"', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Double underline',
-            properties: xmlNode(`<rPr u="dbl"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Double underline',
+                properties: xmlNode(`<rPr u="dbl"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1160,15 +1332,17 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('color override options (fontRefColor, cellTextColor)', () => {
     it('prefers explicit run color over fontRefColor', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Explicit wins',
-            properties: xmlNode(
-              `<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Explicit wins',
+                properties: xmlNode(`<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       const container = document.createElement('div');
@@ -1182,12 +1356,16 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('applies fontRefColor when run has no explicit color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'SmartArt text',
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'SmartArt text',
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       const container = document.createElement('div');
@@ -1201,12 +1379,16 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('uses cellTextColor as fallback when no other color set', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Table cell',
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Table cell',
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       const container = document.createElement('div');
@@ -1224,10 +1406,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('placeholder category inheritance', () => {
     it('treats ctrTitle as title category', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Centered title' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Centered title' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'ctrTitle' });
       // Should be treated as title (no bullets)
@@ -1251,10 +1435,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('treats obj as body category', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Object text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Object text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'obj' });
       expect(container.textContent).toContain('Object text');
@@ -1262,10 +1448,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('defaults to other category for unknown placeholder types', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Other text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Other text' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body, { type: 'unknown' });
       expect(container.textContent).toContain('Other text');
@@ -1331,11 +1519,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('style inheritance paths', () => {
     it('inherits alignment from paragraph properties', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr algn="ctr"/>`),
-          runs: [{ text: 'Centered' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr algn="ctr"/>`),
+            runs: [{ text: 'Centered' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body);
@@ -1373,11 +1563,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('auto-numbering arabic variations', () => {
     it('renders arabicParenBoth numbering', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicParenBoth"/></pPr>`),
-          runs: [{ text: 'Both parens' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicParenBoth"/></pPr>`),
+            runs: [{ text: 'Both parens' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('(1)');
@@ -1385,11 +1577,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('renders arabicPlain numbering (no punctuation)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buAutoNum type="arabicPlain"/></pPr>`),
-          runs: [{ text: 'Plain' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buAutoNum type="arabicPlain"/></pPr>`),
+            runs: [{ text: 'Plain' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('1 ');
@@ -1402,19 +1596,23 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('bullet color resolution', () => {
     it('uses buClr over defRPr and run colors', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(
-            `<pPr>
+        paragraphs: [
+          {
+            properties: xmlNode(
+              `<pPr>
               <buChar char="●"/>
               <buClr><srgbClr val="FF0000"/></buClr>
             </pPr>`,
-          ),
-          runs: [{
-            text: 'Red bullet',
-            properties: xmlNode(`<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`),
-          }],
-          level: 0,
-        }],
+            ),
+            runs: [
+              {
+                text: 'Red bullet',
+                properties: xmlNode(`<rPr><solidFill><srgbClr val="00FF00"/></solidFill></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const bulletSpan = container.querySelector('span');
@@ -1424,16 +1622,18 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('falls back to first run color for bullet', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buChar char="●"/></pPr>`),
-          runs: [{
-            text: 'Bullet inherits color',
-            properties: xmlNode(
-              `<rPr><solidFill><srgbClr val="0000FF"/></solidFill></rPr>`,
-            ),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buChar char="●"/></pPr>`),
+            runs: [
+              {
+                text: 'Bullet inherits color',
+                properties: xmlNode(`<rPr><solidFill><srgbClr val="0000FF"/></solidFill></rPr>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const bulletSpan = container.querySelector('span');
@@ -1448,11 +1648,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
             <defRPr><solidFill><srgbClr val="FF0000"/></solidFill></defRPr>
           </lvl1pPr>
         </lstStyle>`,
-        paragraphs: [{
-          properties: xmlNode(`<pPr><buChar char="●"/></pPr>`),
-          runs: [{ text: 'lstStyle bullet' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><buChar char="●"/></pPr>`),
+            runs: [{ text: 'lstStyle bullet' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const bulletSpan = container.querySelector('span');
@@ -1472,11 +1674,13 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       );
 
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr algn="r"/>`),
-          runs: [{ text: 'Paragraph style wins' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr algn="r"/>`),
+            runs: [{ text: 'Paragraph style wins' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = document.createElement('div');
@@ -1488,14 +1692,18 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('run rPr fontSize overrides paragraph defRPr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode(`<pPr><defRPr><sz="1200"/></defRPr></pPr>`),
-          runs: [{
-            text: 'Run size wins',
-            properties: xmlNode(`<rPr sz="2400"/>`),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(`<pPr><defRPr><sz="1200"/></defRPr></pPr>`),
+            runs: [
+              {
+                text: 'Run size wins',
+                properties: xmlNode(`<rPr sz="2400"/>`),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -1510,10 +1718,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('placeholder matching', () => {
     it('renders placeholder with specific type', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Typed placeholder' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Typed placeholder' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body, { type: 'body' });
@@ -1522,10 +1732,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
 
     it('renders placeholder with both type and idx', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Indexed placeholder' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Indexed placeholder' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body, { type: 'body', idx: 1 });
@@ -1539,10 +1751,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
   describe('placeholder type handling', () => {
     it('renders picture placeholder text', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Picture text' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Picture text' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body, { type: 'pic' });
@@ -1553,10 +1767,12 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       const placeholders = ['body', 'title', 'dt', 'ftr', 'sldNum', 'pic'];
       for (const phType of placeholders) {
         const body = makeTextBody({
-          paragraphs: [{
-            runs: [{ text: `Type: ${phType}` }],
-            level: 0,
-          }],
+          paragraphs: [
+            {
+              runs: [{ text: `Type: ${phType}` }],
+              level: 0,
+            },
+          ],
         });
 
         const container = renderToContainer(body, { type: phType as any });

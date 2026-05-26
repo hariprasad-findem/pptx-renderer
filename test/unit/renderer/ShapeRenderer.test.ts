@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseXml } from '../../../src/parser/XmlParser';
 import { parseShapeNode } from '../../../src/model/nodes/ShapeNode';
 import { renderShape } from '../../../src/renderer/ShapeRenderer';
@@ -32,11 +32,7 @@ function buildLineShapeXml(): string {
 function mixHex(base: string, target: string, t: number): string {
   const b = hexToRgb(base);
   const dst = hexToRgb(target);
-  return rgbToHex(
-    b.r + (dst.r - b.r) * t,
-    b.g + (dst.g - b.g) * t,
-    b.b + (dst.b - b.b) * t,
-  );
+  return rgbToHex(b.r + (dst.r - b.r) * t, b.g + (dst.g - b.g) * t, b.b + (dst.b - b.b) * t);
 }
 
 function extractPathNumbers(path: string): number[] {
@@ -44,6 +40,110 @@ function extractPathNumbers(path: string): number[] {
 }
 
 describe('ShapeRenderer', () => {
+  it('keeps master text size for vertical text boxes without applying wide CSS line-height (ai-computing slide 22)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="171" name="文本框 170"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="986021" y="3435805"/><a:ext cx="660199" cy="1199896"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr vert="eaVert" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">
+            <a:noAutofit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr algn="dist">
+              <a:lnSpc><a:spcPct val="150000"/></a:lnSpc>
+            </a:pPr>
+            <a:r>
+              <a:rPr lang="zh-CN" b="1">
+                <a:latin typeface="微软雅黑"/>
+                <a:ea typeface="微软雅黑"/>
+              </a:rPr>
+              <a:t>应用场景</a:t>
+            </a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const ctx = createMockRenderContext();
+    ctx.presentation.defaultTextStyle = parseXml(`
+      <p:defaultTextStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr>
+      </p:defaultTextStyle>
+    `);
+    ctx.master.textStyles.otherStyle = parseXml(`
+      <p:otherStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr>
+      </p:otherStyle>
+    `);
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const span = Array.from(el.querySelectorAll('span')).find((node) =>
+      node.textContent?.includes('应用场景'),
+    ) as HTMLElement | undefined;
+    const paragraph = span?.closest('div') as HTMLElement | undefined;
+    const textContainer = paragraph?.parentElement as HTMLElement | undefined;
+
+    expect(span).toBeDefined();
+    expect(span!.style.fontSize).toBe('24pt');
+    expect(paragraph).toBeDefined();
+    expect(paragraph!.style.lineHeight).toBe('1');
+    expect(paragraph!.style.wordBreak).toBe('keep-all');
+    expect(textContainer).toBeDefined();
+    expect(textContainer!.style.justifyContent).toBe('center');
+    expect(textContainer!.style.alignItems).toBe('flex-start');
+  });
+
+  it('continues to inherit master text styles for placeholders', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="Content Placeholder"/>
+          <p:cNvSpPr/>
+          <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Placeholder</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const ctx = createMockRenderContext();
+    ctx.presentation.defaultTextStyle = parseXml(`
+      <p:defaultTextStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr>
+      </p:defaultTextStyle>
+    `);
+    ctx.master.textStyles.bodyStyle = parseXml(`
+      <p:bodyStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                   xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr>
+      </p:bodyStyle>
+    `);
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const span = el.querySelector('span') as HTMLElement;
+
+    expect(span.style.fontSize).toBe('24pt');
+  });
+
   it('should not add extra marker stroke for triangle arrowheads', () => {
     const shapeNode = parseShapeNode(parseXml(buildLineShapeXml()));
     const el = renderShape(shapeNode, createMockRenderContext());
@@ -61,7 +161,9 @@ describe('ShapeRenderer', () => {
     expect(marker).toBeTruthy();
     // Regression: arrowhead was present but visually too tiny on connector-heavy slides.
     expect(Number.parseFloat(marker!.getAttribute('markerWidth') || '0')).toBeGreaterThanOrEqual(6);
-    expect(Number.parseFloat(marker!.getAttribute('markerHeight') || '0')).toBeGreaterThanOrEqual(5);
+    expect(Number.parseFloat(marker!.getAttribute('markerHeight') || '0')).toBeGreaterThanOrEqual(
+      5,
+    );
     // Arrow tip should anchor to line endpoint (avoid entering target shape interior).
     expect(marker?.getAttribute('refX')).toBe('10');
   });
@@ -228,7 +330,15 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       theme: {
         ...createMockRenderContext().theme,
-        fillStyles: [parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), themeFill],
+        fillStyles: [
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
+          themeFill,
+        ],
       },
     });
 
@@ -250,6 +360,757 @@ describe('ShapeRenderer', () => {
     expect(stops).toHaveLength(2);
     expect(stops[0]?.getAttribute('stop-color')).toBe(expectedStart.color);
     expect(stops[1]?.getAttribute('stop-color')).toBe(expectedEnd.color);
+  });
+
+  it('uses inherited layout bodyPr normAutofit for text container scaling', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="10" name="Placeholder Text"/>
+          <p:cNvSpPr/>
+          <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:rPr sz="2400"/><a:t>Inherited scale</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    shapeNode.textBody!.layoutBodyProperties = parseXml(
+      '<bodyPr><normAutofit fontScale="50000"/></bodyPr>',
+    );
+
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Inherited scale'),
+    ) as HTMLElement | undefined;
+
+    expect(textContainer).toBeDefined();
+    expect(textContainer!.style.transform).toContain('scale(0.5)');
+  });
+
+  it('preserves existing text transforms when dynamic autofit applies scale', () => {
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(100);
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(200);
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="11" name="Vertical Text"/>
+            <p:cNvSpPr/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="1000000" cy="2000000"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr vert="vert270"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p><a:r><a:rPr sz="2400"/><a:t>Overflow text</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+        div.textContent?.includes('Overflow text'),
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).toContain('rotate(180deg)');
+      expect(textContainer!.style.transform).toContain('scale(0.5)');
+    } finally {
+      clientHeightSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('uses natural single-line width for horizontal spAutoFit scaling (ai-computing slide 14)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 1176 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 39 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 1558 : 1176;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 50 : 95;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="538" name="TextBox 22"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="267981" y="1023557"/><a:ext cx="11201149" cy="369332"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p><a:r><a:rPr b="1"/><a:t>异构算力纳管：支持同时管理AI集群、HPC科学计算集群，支持节点在AI/HPC模式间灵活切换，并运行任务。</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) => div.textContent?.includes('异构算力纳管') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const scaleMatch = textContainer?.style.transform.match(/scale\(([^)]+)\)/);
+      const scale = Number(scaleMatch?.[1]);
+
+      expect(textContainer).toBeDefined();
+      expect(scale).toBeGreaterThan(0.7);
+      expect(scale).toBeLessThan(0.8);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('does not shrink narrow spAutoFit axis labels when text overflow is explicit (xcloud-plan slides 8 and 79)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 9 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 78 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        return this.style.whiteSpace === 'nowrap' ? 67 : 9;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        return this.style.whiteSpace === 'nowrap' ? 12 : 91;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="63" name="TextBox 62"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="629139" y="3833972"/><a:ext cx="89795" cy="738664"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr horzOverflow="overflow" vertOverflow="overflow" wrap="square"
+                      lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr">
+              <a:spAutoFit/>
+            </a:bodyPr>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr algn="ctr"/>
+              <a:r><a:rPr sz="800"/><a:t>交付服务比重</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) => div.textContent?.includes('交付服务比重') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowY).toBe('visible');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('auto-shrinks single-line shape text when bodyPr omits an autofit mode (ai-computing slide 12)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 252 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 38 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 330 : 252;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 42 : 84;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="165" name="矩形: 圆角 164"/>
+            <p:cNvSpPr/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="4716050" y="2117131"/><a:ext cx="2400600" cy="360437"/></a:xfrm>
+            <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+            <a:solidFill><a:srgbClr val="3B75D3"/></a:solidFill>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr algn="ctr"><a:defRPr/></a:pPr>
+              <a:r><a:rPr b="1"><a:solidFill><a:prstClr val="white"/></a:solidFill></a:rPr><a:t>智能算力管理平台</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('智能算力管理平台') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.overflowY).toBe('hidden');
+      expect(textContainer!.style.transform).toContain('scale(');
+      const scale = Number(textContainer!.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
+      expect(scale).toBeLessThan(1);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('keeps single-line title placeholders on one line when inherited noAutofit would wrap from font metrics (xcloud-plan slide 14)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 842 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 44 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 900 : 842;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 44 : 88;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="5" name="Title 28"/>
+            <p:cNvSpPr/>
+            <p:nvPr><p:ph type="title"/></p:nvPr>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="760413" y="442528"/><a:ext cx="8016034" cy="418576"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p>
+              <a:r><a:rPr lang="en-US"/><a:t>FY2526</a:t></a:r>
+              <a:r><a:rPr lang="zh-CN"/><a:t> 产品路线图：理清节奏、逐步推进（</a:t></a:r>
+              <a:r><a:rPr lang="en-US"/><a:t>2/2</a:t></a:r>
+              <a:r><a:rPr lang="zh-CN"/><a:t>）</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+      const shapeNode = parseShapeNode(parseXml(xml));
+      shapeNode.textBody!.layoutBodyProperties = parseXml(
+        '<bodyPr wrap="square"><noAutofit/></bodyPr>',
+      );
+
+      const el = renderShape(shapeNode, createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('FY2526 产品路线图') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const scale = Number(textContainer?.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
+
+      expect(textContainer).toBeDefined();
+      expect(scale).toBeGreaterThan(0.9);
+      expect(scale).toBeLessThan(1);
+      expect(textContainer!.style.width).toBe(`${100 / scale}%`);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('does not shrink horizontal spAutoFit text when wrapped layout already fits (ai-computing slide 23)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 512 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 125 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 782 : 512;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 125 : 0;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="26" name="TextBox 25"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="6977148" y="1781009"/><a:ext cx="4431383" cy="1229764"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr marL="171450" indent="-171450">
+                <a:lnSpc><a:spcPct val="150000"/></a:lnSpc>
+                <a:spcBef><a:spcPts val="600"/></a:spcBef>
+                <a:buChar char="Ø"/>
+              </a:pPr>
+              <a:r><a:rPr sz="1100"/><a:t>将物理GPU进行细粒度切分，对GPU算力和显存进行内核级细粒度切分与池化。</a:t></a:r>
+            </a:p>
+            <a:p>
+              <a:pPr marL="171450" indent="-171450">
+                <a:lnSpc><a:spcPct val="150000"/></a:lnSpc>
+                <a:spcBef><a:spcPts val="600"/></a:spcBef>
+                <a:buChar char="Ø"/>
+              </a:pPr>
+              <a:r><a:rPr sz="1100"/><a:t>支持按任务需求精确分配显存与算力，能够显著降低用户使用门槛和资源空置率。</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('支持按任务需求') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.width).toBe('100%');
+      expect(textContainer!.style.height).toBe('100%');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('does not shrink bullet spAutoFit text because hanging indent uses internal width (opentelemetry slide 9)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 461 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 145 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        if (this.style.whiteSpace === 'nowrap') return 1285;
+        const para = this.querySelector('div') as HTMLElement | null;
+        return para?.style.boxSizing === 'border-box' && para.style.paddingLeft === '30px'
+          ? 461
+          : 491;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 145 : 0;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="20" name="TextBox 19"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="6893106" y="3325016"/><a:ext cx="4392856" cy="1384995"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr marL="285750" indent="-285750" algn="l">
+                <a:buFont typeface="Arial"/>
+                <a:buChar char="•"/>
+              </a:pPr>
+              <a:r><a:rPr sz="1400"><a:latin typeface="Arial"/></a:rPr><a:t>完全复用OpenTelemetry基础设施，包括采集和导出支持。</a:t></a:r>
+            </a:p>
+            <a:p>
+              <a:pPr marL="285750" indent="-285750" algn="l">
+                <a:buFont typeface="Arial"/>
+                <a:buChar char="•"/>
+              </a:pPr>
+              <a:r><a:rPr sz="1400"><a:latin typeface="Arial"/></a:rPr><a:t>提供了GenAI体系的Telemetry数据语义约定。</a:t></a:r>
+            </a:p>
+            <a:p>
+              <a:pPr marL="285750" indent="-285750" algn="l">
+                <a:buFont typeface="Arial"/>
+                <a:buChar char="•"/>
+              </a:pPr>
+              <a:r><a:rPr sz="1400"><a:latin typeface="Arial"/></a:rPr><a:t>支持OpenAI、 Vertex AI(Google)、 HuggingFace、 Bedrock等LLM服务，支持Pinecone、 Chroma等向量数据库，支持LangChain、LlamaIndex等框架。</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('完全复用OpenTelemetry基础设施') &&
+          div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const para = textContainer?.querySelector('div') as HTMLElement | null;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(para?.style.marginLeft).toBe('');
+      expect(para?.style.paddingLeft).toBe('30px');
+      expect(para?.style.textIndent).toBe('-30px');
+      expect(para?.style.boxSizing).toBe('border-box');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('does not shrink single-line spAutoFit text because paragraph spacing is outside the fit box (ai-computing slide 23)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 388 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 39 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 388 : 0;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        const para = this.querySelector('div') as HTMLElement | null;
+        return para?.style.marginTop === '0px' &&
+          para?.style.marginBottom === '0px' &&
+          para?.style.lineHeight === 'normal'
+          ? 39
+          : 89;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="20" name="文本框 20"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="1255813" y="1876657"/><a:ext cx="4405067" cy="373179"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr algn="ctr">
+                <a:lnSpc><a:spcPts val="2250"/></a:lnSpc>
+                <a:spcBef><a:spcPts val="2400"/></a:spcBef>
+                <a:spcAft><a:spcPts val="1200"/></a:spcAft>
+              </a:pPr>
+              <a:r><a:rPr sz="1400" b="1"/><a:t>实现算力的精细切分与安全隔离</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('实现算力的精细切分') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const para = textContainer?.querySelector('div') as HTMLElement | null;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.justifyContent).toBe('center');
+      expect(textContainer!.style.width).toBe('100%');
+      expect(textContainer!.style.height).toBe('100%');
+      expect(para?.style.marginTop).toBe('0px');
+      expect(para?.style.marginBottom).toBe('0px');
+      expect(para?.style.lineHeight).toBe('normal');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('renders supported prstTxWarp text as SVG textPath (ai-computing slide 28)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="54" name="文本框 53"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm rot="457793">
+            <a:off x="940634" y="4312755"/>
+            <a:ext cx="1773757" cy="307777"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square">
+            <a:prstTxWarp prst="textArchDown"><a:avLst/></a:prstTxWarp>
+            <a:spAutoFit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr algn="ctr"><a:buNone/></a:pPr>
+            <a:r>
+              <a:rPr sz="1200">
+                <a:solidFill><a:srgbClr val="000000"/></a:solidFill>
+                <a:latin typeface="-apple-system"/>
+                <a:ea typeface="微软雅黑"/>
+              </a:rPr>
+              <a:t>任务一键启停，快速训练</a:t>
+            </a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textPath = el.querySelector('textPath');
+    const warpPath = el.querySelector('defs path');
+    const htmlTextContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('任务一键启停'),
+    );
+
+    expect(textPath).toBeDefined();
+    expect(textPath!.textContent).toBe('任务一键启停，快速训练');
+    expect(textPath!.getAttribute('startOffset')).toBe('50%');
+    expect(textPath!.getAttribute('text-anchor')).toBe('middle');
+    expect(warpPath?.getAttribute('d')).toContain('Q');
+    expect(el.querySelector('text')?.getAttribute('font-size')).toBe('12pt');
+    expect(htmlTextContainer).toBeUndefined();
+  });
+
+  it('does not shrink wrapped spAutoFit text when Office single line spacing fits (ai-computing slide 28 footer)', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 685 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 68 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        const para = this.querySelector('div') as HTMLElement | null;
+        return para?.style.width === '100%' &&
+          para.style.minWidth === '0px' &&
+          para.style.overflowWrap === 'anywhere'
+          ? 685
+          : 1198;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        const para = this.querySelector('div') as HTMLElement | null;
+        return para?.style.lineHeight === '1' ? 74 : 119;
+      });
+
+    try {
+      const ctx = createMockRenderContext();
+      ctx.master.textStyles.otherStyle = parseXml(`
+        <p:otherStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr>
+        </p:otherStyle>
+      `);
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="36" name="文本框 35"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="2726188" y="5622532"/><a:ext cx="6528885" cy="646331"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle/>
+            <a:p>
+              <a:pPr lvl="0" algn="ctr"><a:defRPr/></a:pPr>
+              <a:r><a:rPr b="1"><a:solidFill><a:srgbClr val="3F58CA"/></a:solidFill></a:rPr><a:t>为追求极致性能与灵活控制的</a:t></a:r>
+              <a:r><a:rPr b="1"><a:solidFill><a:srgbClr val="3F58CA"/></a:solidFill></a:rPr><a:t>AI</a:t></a:r>
+              <a:r><a:rPr b="1"><a:solidFill><a:srgbClr val="3F58CA"/></a:solidFill></a:rPr><a:t>团队，提供高度自主、稳定可靠的专业训练基础设施</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('为追求极致性能') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const para = textContainer?.querySelector('div') as HTMLElement | null;
+      const span = textContainer?.querySelector('span') as HTMLElement | null;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(para?.style.width).toBe('100%');
+      expect(para?.style.minWidth).toBe('0px');
+      expect(para?.style.maxWidth).toBe('100%');
+      expect(para?.style.overflowWrap).toBe('anywhere');
+      expect(para?.style.lineHeight).toBe('1');
+      expect(span?.style.fontSize).toBe('24pt');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
   });
 
   it('keeps multi-path bevel shading anchored to fillRef base color when main fill is gradient', () => {
@@ -283,7 +1144,15 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       theme: {
         ...createMockRenderContext().theme,
-        fillStyles: [parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'), themeFill],
+        fillStyles: [
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
+          themeFill,
+        ],
       },
     });
 
@@ -341,8 +1210,12 @@ describe('ShapeRenderer', () => {
       theme: {
         ...createMockRenderContext().theme,
         fillStyles: [
-          parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'),
-          parseXml('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>'),
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
+          parseXml(
+            '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>',
+          ),
           themeFill,
         ],
       },
@@ -354,6 +1227,56 @@ describe('ShapeRenderer', () => {
     expect(paths[0]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-/);
     expect(paths[1]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-face-/);
     expect(faceStops[0]?.getAttribute('stop-color')).toBe(applyTint('#316dd7', 65000));
+  });
+
+  it('does not draw multi-path can outline when shape line is explicitly noFill (model-platform slide 20)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="24" name="圆柱体 23"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1068208" y="1765570"/><a:ext cx="2197118" cy="647996"/></a:xfrm>
+          <a:prstGeom prst="can"><a:avLst/></a:prstGeom>
+          <a:gradFill flip="none" rotWithShape="1">
+            <a:gsLst>
+              <a:gs pos="47000"><a:schemeClr val="accent6"/></a:gs>
+              <a:gs pos="100000"><a:schemeClr val="accent5"><a:lumMod val="90000"/></a:schemeClr></a:gs>
+            </a:gsLst>
+            <a:lin ang="2700000" scaled="1"/>
+            <a:tileRect/>
+          </a:gradFill>
+          <a:ln><a:noFill/></a:ln>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="2"><a:schemeClr val="accent1"><a:shade val="50000"/></a:schemeClr></a:lnRef>
+          <a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>
+        </p:style>
+      </p:sp>
+    `;
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        colorScheme: new Map([
+          ['dk1', '000000'],
+          ['lt1', 'FFFFFF'],
+          ['accent1', 'E1140A'],
+          ['accent5', '46C8E1'],
+          ['accent6', '3B51D3'],
+        ]),
+      },
+    });
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const paths = Array.from(el.querySelectorAll('path'));
+
+    expect(paths.length).toBeGreaterThanOrEqual(3);
+    expect(paths.every((path) => path.getAttribute('stroke') === 'none')).toBe(true);
   });
 
   it('renders actionButtonBackPrevious as multi-path with darken sub-paths (oracle-full-shapeid-0129)', () => {
@@ -674,7 +1597,9 @@ describe('ShapeRenderer', () => {
   });
 
   it('renders dashDot and lgDashDotDot with distinct SVG dash arrays', () => {
-    const makeShape = (dash: string) => parseShapeNode(parseXml(`
+    const makeShape = (dash: string) =>
+      parseShapeNode(
+        parseXml(`
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
         <p:nvSpPr><p:cNvPr id="54" name="${dash}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
@@ -685,7 +1610,8 @@ describe('ShapeRenderer', () => {
           <a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:prstDash val="${dash}"/></a:ln>
         </p:spPr>
       </p:sp>
-    `));
+    `),
+      );
 
     const ctx = createMockRenderContext();
     const dashDotPath = renderShape(makeShape('dashDot'), ctx).querySelector('path');
@@ -935,7 +1861,8 @@ describe('ShapeRenderer', () => {
     `;
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
-    const reflect = el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
+    const reflect =
+      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
     expect(reflect).toContain('linear-gradient');
   });
 
@@ -1020,9 +1947,9 @@ describe('ShapeRenderer', () => {
     // Should have two linear gradients (H and V) for rect path
     const linearGrads = Array.from(defs?.querySelectorAll('linearGradient') ?? []);
     expect(linearGrads.length).toBeGreaterThanOrEqual(2);
-    expect(linearGrads.every((grad) => grad.getAttribute('color-interpolation') === 'linearRGB')).toBe(
-      true,
-    );
+    expect(
+      linearGrads.every((grad) => grad.getAttribute('color-interpolation') === 'linearRGB'),
+    ).toBe(true);
     // Should have blend group with lighten somewhere in the SVG
     const blendGroup = svg?.querySelector('g[style*="isolation"]');
     expect(blendGroup).toBeTruthy();
@@ -1164,32 +2091,23 @@ describe('ShapeRenderer', () => {
     const mainPath = svgPaths[0]?.getAttribute('d') ?? '';
     const foldPath = svgPaths[1]?.getAttribute('d') ?? '';
     const creasePath = svgPaths[2]?.getAttribute('d') ?? '';
-    expect(extractPathNumbers(mainPath)).toEqual([
-      0,
-      0,
-      419.9475065616798,
-      0,
-      419.9475065616798,
-      211.65354330708664,
-      337.6377952755906,
-      293.96325459317586,
-      0,
-      293.96325459317586,
-    ].map((n) => expect.closeTo(n, 10)));
-    expect(extractPathNumbers(foldPath)).toEqual([
-      337.6377952755906,
-      293.96325459317586,
-      337.6377952755906,
-      211.65354330708664,
-      419.9475065616798,
-      211.65354330708664,
-    ].map((n) => expect.closeTo(n, 10)));
-    expect(extractPathNumbers(creasePath)).toEqual([
-      337.6377952755906,
-      293.96325459317586,
-      337.6377952755906,
-      211.65354330708664,
-    ].map((n) => expect.closeTo(n, 10)));
+    expect(extractPathNumbers(mainPath)).toEqual(
+      [
+        0, 0, 419.9475065616798, 0, 419.9475065616798, 211.65354330708664, 337.6377952755906,
+        293.96325459317586, 0, 293.96325459317586,
+      ].map((n) => expect.closeTo(n, 10)),
+    );
+    expect(extractPathNumbers(foldPath)).toEqual(
+      [
+        337.6377952755906, 293.96325459317586, 337.6377952755906, 211.65354330708664,
+        419.9475065616798, 211.65354330708664,
+      ].map((n) => expect.closeTo(n, 10)),
+    );
+    expect(extractPathNumbers(creasePath)).toEqual(
+      [337.6377952755906, 293.96325459317586, 337.6377952755906, 211.65354330708664].map((n) =>
+        expect.closeTo(n, 10),
+      ),
+    );
     expect(mainFill).toBeTruthy();
     expect(foldFill).toBeTruthy();
     expect(foldFill).not.toBe(mainFill);
@@ -1221,7 +2139,9 @@ describe('ShapeRenderer', () => {
         ...createMockRenderContext().theme,
         colorScheme: new Map([['accent1', '4F81BD']]),
         fillStyles: [
-          parseXml(`<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`),
+          parseXml(
+            `<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`,
+          ),
           parseXml(`
             <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
               <a:gsLst>
@@ -1366,6 +2286,39 @@ describe('ShapeRenderer', () => {
     const path = el.querySelector('path');
     expect(path).toBeTruthy();
     expect(el.style.height).toBe('1px'); // Should have minimum height
+  });
+
+  it('renders near-zero height connectors with a visible SVG viewport (ai-computing slide 40 title mask)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="39" name="Straight Connector 8"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm flipV="1">
+            <a:off x="745122" y="2283149"/>
+            <a:ext cx="1235118" cy="1"/>
+          </a:xfrm>
+          <a:prstGeom prst="line"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="28575" cap="flat">
+            <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const svg = el.querySelector('svg');
+    const path = el.querySelector('path');
+
+    expect(svg).toBeTruthy();
+    expect(svg?.getAttribute('height')).toBe('1');
+    expect(el.style.height).toBe('1px');
+    expect(path?.getAttribute('stroke')).toBe('#FFFFFF');
+    expect(path?.getAttribute('stroke-width')).toBe('3');
   });
 
   it('renders shape with transparent fill', () => {
@@ -1627,9 +2580,7 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       slide: {
         ...createMockRenderContext().slide,
-        rels: new Map([
-          ['rId5', { type: 'slide', target: 'slide28.xml' }],
-        ]),
+        rels: new Map([['rId5', { type: 'slide', target: 'slide28.xml' }]]),
       },
       onNavigate: (target) => navigateCalls.push(target),
     });
@@ -1666,9 +2617,7 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       slide: {
         ...createMockRenderContext().slide,
-        rels: new Map([
-          ['rId6', { type: 'slide', target: 'slide5.xml' }],
-        ]),
+        rels: new Map([['rId6', { type: 'slide', target: 'slide5.xml' }]]),
       },
       onNavigate: () => {},
     });
@@ -1701,9 +2650,7 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       slide: {
         ...createMockRenderContext().slide,
-        rels: new Map([
-          ['rId7', { type: 'slide', target: 'slide10.xml' }],
-        ]),
+        rels: new Map([['rId7', { type: 'slide', target: 'slide10.xml' }]]),
       },
       onNavigate: () => {},
     });
@@ -1737,9 +2684,7 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       slide: {
         ...createMockRenderContext().slide,
-        rels: new Map([
-          ['rId8', { type: 'slide', target: 'slide3.xml' }],
-        ]),
+        rels: new Map([['rId8', { type: 'slide', target: 'slide3.xml' }]]),
       },
     });
 
@@ -2015,9 +2960,7 @@ describe('ShapeRenderer', () => {
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
     const reflect =
-      el.style.getPropertyValue('-webkit-box-reflect') ||
-      (el.style as any).webkitBoxReflect ||
-      '';
+      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
     // Default stA=0.5, endA=0 → gradient goes from rgba(255,255,255,0.500) to rgba(255,255,255,0.000)
     expect(reflect).toContain('0.500');
     expect(reflect).toContain('0.000');
@@ -2042,9 +2985,7 @@ describe('ShapeRenderer', () => {
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
     const reflect =
-      el.style.getPropertyValue('-webkit-box-reflect') ||
-      (el.style as any).webkitBoxReflect ||
-      '';
+      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
     expect(reflect).toContain('below 0.0px');
   });
 
@@ -2367,7 +3308,7 @@ describe('ShapeRenderer', () => {
     const shapeNode = parseShapeNode(parseXml(xml));
     // Set layout bodyPr with anchor="b" (as the truescale layout does)
     shapeNode.textBody!.layoutBodyProperties = parseXml(
-      '<bodyPr lIns="0" tIns="0" rIns="121899" bIns="0" anchor="b" anchorCtr="0"/>'
+      '<bodyPr lIns="0" tIns="0" rIns="121899" bIns="0" anchor="b" anchorCtr="0"/>',
     );
     const ctx = createMockRenderContext();
     const el = renderShape(shapeNode, ctx);

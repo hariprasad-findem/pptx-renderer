@@ -420,6 +420,32 @@ describe('renderBackground', () => {
     );
   });
 
+  it('renders bgRef idx through the theme fill style instead of flattening to color', () => {
+    const bg = bgRefXml(1002, `<a:schemeClr val="accent1"/>`);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      theme: {
+        ...createMockRenderContext().theme,
+        bgFillStyles: [
+          parseXml(`<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`),
+          parseXml(`
+            <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="phClr"/></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:lin ang="5400000"/>
+            </a:gradFill>
+          `),
+        ],
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.background).toContain('linear-gradient');
+  });
+
   // -------------------------------------------------------------------------
   // Additional: blipFill missing from media map does not crash and sets no URL
   // -------------------------------------------------------------------------

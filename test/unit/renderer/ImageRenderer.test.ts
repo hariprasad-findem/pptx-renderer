@@ -71,6 +71,28 @@ describe('renderImage', () => {
     });
   });
 
+  describe('linked images', () => {
+    it('renders a safe external image from blipLink when no embedded image is present', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rIdLink', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: 'https://example.com/linked-image.png',
+        targetMode: 'External',
+      });
+      const node = createPicNode({
+        blipEmbed: undefined,
+        blipLink: 'rIdLink',
+      });
+
+      const el = renderImage(node, ctx);
+      const img = el.querySelector('img');
+
+      expect(img).not.toBeNull();
+      expect(img!.src).toBe('https://example.com/linked-image.png');
+      expect(el.textContent).not.toContain('No image data');
+    });
+  });
+
   describe('crop with pixel-based margins', () => {
     it('uses pixel values for crop offset (not percentages)', () => {
       const ctx = createCtxWithMedia();

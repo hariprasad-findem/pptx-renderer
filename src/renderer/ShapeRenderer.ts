@@ -14,6 +14,21 @@ function hasVisibleText(textBody: TextBody): boolean {
   }
   return false;
 }
+
+function isSingleLineTextBody(textBody: TextBody): boolean {
+  let visibleParagraphCount = 0;
+  for (const p of textBody.paragraphs) {
+    const hasVisibleRun = p.runs.some((r) => r.text != null && r.text.length > 0);
+    if (!hasVisibleRun) continue;
+    visibleParagraphCount++;
+    if (visibleParagraphCount > 1 || p.runs.some((r) => r.text === '\n')) return false;
+  }
+  return visibleParagraphCount === 1;
+}
+
+function isTitlePlaceholder(placeholder: ShapeNodeData['placeholder']): boolean {
+  return placeholder?.type === 'title' || placeholder?.type === 'ctrTitle';
+}
 import {
   resolveFill,
   resolveLineStyle,
@@ -36,6 +51,112 @@ import { applyTint, hexToRgb, rgbToHex } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalUrl } from '../utils/urlSafety';
+import { getEffectiveBodyPrChild } from './TextBodyProperties';
+
+function appendTransform(el: HTMLElement, transform: string): void {
+  el.style.transform = `${el.style.transform || ''} ${transform}`.trim();
+}
+
+function applyVerticalTextFlow(el: HTMLElement, anchor: string | null | undefined): void {
+  el.style.writingMode = 'vertical-rl';
+  el.style.justifyContent = 'center';
+  el.style.alignItems = anchor === 'b' ? 'flex-end' : anchor === 'ctr' ? 'center' : 'flex-start';
+}
+
+const WRAPPED_AUTOFIT_HEIGHT_TOLERANCE = 1.1;
+
+function getSupportedTextWarpPreset(textBody: TextBody): 'textArchDown' | 'textArchUp' | null {
+  const prstTxWarp = textBody.bodyProperties?.child('prstTxWarp');
+  const preset = prstTxWarp?.attr('prst');
+  return preset === 'textArchDown' || preset === 'textArchUp' ? preset : null;
+}
+
+function getSingleLineWarpText(textBody: TextBody): string | null {
+  let text = '';
+  let visibleParagraphCount = 0;
+  for (const paragraph of textBody.paragraphs) {
+    const visibleRuns = paragraph.runs.filter((run) => run.text != null && run.text.length > 0);
+    if (visibleRuns.length === 0) continue;
+    visibleParagraphCount++;
+    if (visibleParagraphCount > 1 || visibleRuns.some((run) => run.text === '\n')) return null;
+    text += visibleRuns.map((run) => run.text).join('');
+  }
+  return text.length > 0 ? text : null;
+}
+
+function getFirstVisibleRunProperties(textBody: TextBody): SafeXmlNode | undefined {
+  for (const paragraph of textBody.paragraphs) {
+    for (const run of paragraph.runs) {
+      if (run.text != null && run.text.length > 0) return run.properties;
+    }
+  }
+  return undefined;
+}
+
+function buildTextArchPath(preset: 'textArchDown' | 'textArchUp', w: number, h: number): string {
+  const padX = Math.min(Math.max(w * 0.04, 4), 18);
+  const startX = padX;
+  const endX = Math.max(startX, w - padX);
+  if (preset === 'textArchDown') {
+    const y = h * 0.36;
+    return `M${startX},${y} Q${w / 2},${h * 0.9} ${endX},${y}`;
+  }
+  const y = h * 0.66;
+  return `M${startX},${y} Q${w / 2},${h * 0.08} ${endX},${y}`;
+}
+
+function renderWarpedTextBody(node: ShapeNodeData, ctx: RenderContext): SVGSVGElement | null {
+  if (!node.textBody) return null;
+  const preset = getSupportedTextWarpPreset(node.textBody);
+  if (!preset) return null;
+  const text = getSingleLineWarpText(node.textBody);
+  if (!text) return null;
+
+  const rPr = getFirstVisibleRunProperties(node.textBody);
+  const fontSize = rPr?.numAttr('sz') !== undefined ? rPr.numAttr('sz')! / 100 : 12;
+  const fontFamily =
+    rPr?.child('latin').attr('typeface') || rPr?.child('ea').attr('typeface') || undefined;
+  const fontWeight = rPr?.attr('b') === '1' || rPr?.attr('b') === 'true' ? 'bold' : undefined;
+  const solidFill = rPr?.child('solidFill');
+  const fill = solidFill?.exists() ? resolveColorToCss(solidFill, ctx) : '#000000';
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${node.size.w} ${node.size.h}`);
+  svg.setAttribute('width', String(node.size.w));
+  svg.setAttribute('height', String(node.size.h));
+  svg.style.position = 'absolute';
+  svg.style.left = '0';
+  svg.style.top = '0';
+  svg.style.overflow = 'visible';
+
+  const defs = document.createElementNS(svgNs, 'defs');
+  const path = document.createElementNS(svgNs, 'path');
+  const pathId = `text-warp-${++gradientIdCounter}`;
+  path.setAttribute('id', pathId);
+  path.setAttribute('d', buildTextArchPath(preset, node.size.w, node.size.h));
+  path.setAttribute('fill', 'none');
+  defs.appendChild(path);
+  svg.appendChild(defs);
+
+  const textEl = document.createElementNS(svgNs, 'text');
+  textEl.setAttribute('font-size', `${fontSize}pt`);
+  if (fontFamily) textEl.setAttribute('font-family', fontFamily);
+  if (fontWeight) textEl.setAttribute('font-weight', fontWeight);
+  textEl.setAttribute('fill', fill);
+  textEl.setAttribute('dominant-baseline', 'middle');
+
+  const textPath = document.createElementNS(svgNs, 'textPath');
+  textPath.setAttribute('href', `#${pathId}`);
+  textPath.setAttribute('startOffset', '50%');
+  textPath.setAttribute('text-anchor', 'middle');
+  textPath.setAttribute('xml:space', 'preserve');
+  textPath.textContent = text;
+  textEl.appendChild(textPath);
+  svg.appendChild(textEl);
+
+  return svg;
+}
 
 // ---------------------------------------------------------------------------
 // Shape blipFill (image fill) — resolve to blob URL for reuse (e.g. SVG/PNG in process diagrams)
@@ -308,11 +429,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       presetKey.includes('connector') ||
       outlineOnlyPresets.has(presetKey));
   const isConnectorShape = node.source.localName === 'cxnSp';
-  const flatExtent =
-    (node.size.w > 0 && node.size.h === 0) || (node.size.w === 0 && node.size.h > 0);
+  const flatExtent = (node.size.w > 0 && node.size.h < 1) || (node.size.w < 1 && node.size.h > 0);
   const isLineLike = presetIsLine || isConnectorShape || flatExtent;
-  const minH = isLineLike && node.size.h === 0 ? 1 : node.size.h;
-  const minW = isLineLike && node.size.w === 0 ? 1 : node.size.w;
+  const minH = isLineLike && node.size.h < 1 ? 1 : node.size.h;
+  const minW = isLineLike && node.size.w < 1 ? 1 : node.size.w;
   wrapper.style.height = `${minH}px`;
   if (node.size.w === 0) wrapper.style.width = `${minW}px`;
   wrapper.style.overflow = 'visible';
@@ -1105,7 +1225,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               defs.appendChild(mask);
               extraPath.setAttribute('mask', `url(#${maskId})`);
             }
-          } else if (sp.stroke) {
+          } else if (sp.stroke && !lineIsNoFill) {
             // Detail lines without explicit line style: avoid using identical fill color,
             // otherwise guide lines (e.g. chartX diagonals) become visually invisible.
             const detailStroke = baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.55) : '#666666';
@@ -1172,191 +1292,301 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
 
   // ---- Render text overlay (only when there is visible text; skip for decorative shapes with empty txBody) ----
   if (node.textBody && node.textBody.paragraphs.length > 0 && hasVisibleText(node.textBody)) {
-    const textContainer = document.createElement('div');
-    textContainer.style.position = 'absolute';
-    if (node.textBoxBounds) {
-      textContainer.style.left = `${node.textBoxBounds.x}px`;
-      textContainer.style.top = `${node.textBoxBounds.y}px`;
-      textContainer.style.width = `${node.textBoxBounds.w}px`;
-      textContainer.style.height = `${node.textBoxBounds.h}px`;
+    const warpedText = renderWarpedTextBody(node, ctx);
+    if (warpedText) {
+      wrapper.appendChild(warpedText);
     } else {
-      textContainer.style.left = '0';
-      textContainer.style.top = '0';
-      textContainer.style.width = '100%';
-      textContainer.style.height = '100%';
-    }
-    textContainer.style.display = 'flex';
-    textContainer.style.flexDirection = 'column';
-    textContainer.style.boxSizing = 'border-box';
-    // Overflow handling based on bodyPr auto-fit mode:
-    // - spAutoFit: shape resizes to fit text → overflow visible
-    // - normAutofit: text shrinks to fit shape → apply fontScale, overflow hidden
-    // - noAutofit: text clips → overflow hidden
-    // - (default, no child): PowerPoint implicitly auto-shrinks → overflow visible
-    const bodyPrForFit = node.textBody?.bodyProperties;
-    const hasSpAutoFit = bodyPrForFit?.child('spAutoFit').exists();
-    const normAutofit = bodyPrForFit?.child('normAutofit');
-    const hasNormAutofit = normAutofit?.exists();
-    textContainer.style.overflowX = 'visible';
-    // noAutofit means "don't auto-fit" — NOT "clip text". PowerPoint allows text to
-    // overflow the shape boundary visibly.
-    textContainer.style.overflowY = 'visible';
-
-    // normAutofit: PowerPoint stores the computed fontScale (1000ths of percent).
-    // Apply it as a CSS transform to shrink text so it fits the shape.
-    let needsDynamicAutofit = false;
-    if (hasNormAutofit && normAutofit) {
-      textContainer.style.overflowY = 'hidden';
-      const fontScale = normAutofit.numAttr('fontScale');
-      const lnSpcReduction = normAutofit.numAttr('lnSpcReduction') ?? 0;
-      if (fontScale != null && fontScale < 100000) {
-        const scale = fontScale / 100000;
-        textContainer.style.transformOrigin = 'top left';
-        textContainer.style.transform = `scale(${scale})`;
-        // Expand container dimensions so the scaled content fills the original space
-        textContainer.style.width = `${100 / scale}%`;
-        textContainer.style.height = `${100 / scale}%`;
-      } else if (fontScale == null) {
-        // fontScale not stored in XML — PowerPoint computes it at runtime.
-        // We'll measure after DOM insertion and apply dynamic scaling.
-        needsDynamicAutofit = true;
+      const textContainer = document.createElement('div');
+      textContainer.style.position = 'absolute';
+      if (node.textBoxBounds) {
+        textContainer.style.left = `${node.textBoxBounds.x}px`;
+        textContainer.style.top = `${node.textBoxBounds.y}px`;
+        textContainer.style.width = `${node.textBoxBounds.w}px`;
+        textContainer.style.height = `${node.textBoxBounds.h}px`;
+      } else {
+        textContainer.style.left = '0';
+        textContainer.style.top = '0';
+        textContainer.style.width = '100%';
+        textContainer.style.height = '100%';
       }
-      if (lnSpcReduction > 0) {
-        const lnFactor = 1 - lnSpcReduction / 100000;
-        textContainer.style.lineHeight = `${lnFactor}`;
-      }
-    }
-    // spAutoFit requests in-shape text fitting. In browser rendering we cannot
-    // resize the absolutely positioned shape like PowerPoint editor behavior,
-    // so use bounded dynamic scaling to prevent bleed across neighboring nodes.
-    if (hasSpAutoFit && !hasNormAutofit) {
-      textContainer.style.overflowY = 'hidden';
-      needsDynamicAutofit = true;
-    }
-
-    // Apply bodyPr (text body properties)
-    // Use layout/master bodyPr as fallback for missing attributes
-    {
+      textContainer.style.display = 'flex';
+      textContainer.style.flexDirection = 'column';
+      textContainer.style.boxSizing = 'border-box';
+      // Overflow handling based on bodyPr auto-fit mode:
+      // - spAutoFit: shape resizes to fit text → overflow visible
+      // - normAutofit: text shrinks to fit shape → apply fontScale, overflow hidden
+      // - noAutofit: text clips → overflow hidden
+      // - (default, no child): PowerPoint implicitly auto-shrinks simple single-line labels
+      const spAutoFit = getEffectiveBodyPrChild(node.textBody, 'spAutoFit');
+      const hasSpAutoFit = spAutoFit?.exists();
+      const normAutofit = getEffectiveBodyPrChild(node.textBody, 'normAutofit');
+      const hasNormAutofit = normAutofit?.exists();
+      const noAutofit = getEffectiveBodyPrChild(node.textBody, 'noAutofit');
+      const hasNoAutofit = noAutofit?.exists();
       const bodyPr = node.textBody.bodyProperties;
       const fallbackBp = node.textBody.layoutBodyProperties;
+      const horzOverflow =
+        (bodyPr ? bodyPr.attr('horzOverflow') : undefined) ??
+        (fallbackBp ? fallbackBp.attr('horzOverflow') : undefined);
+      const vertOverflow =
+        (bodyPr ? bodyPr.attr('vertOverflow') : undefined) ??
+        (fallbackBp ? fallbackBp.attr('vertOverflow') : undefined);
+      const spAutoFitAllowsHorizontalOverflow =
+        hasSpAutoFit && !hasNormAutofit && horzOverflow === 'overflow';
+      const spAutoFitAllowsVerticalOverflow =
+        hasSpAutoFit && !hasNormAutofit && vertOverflow === 'overflow';
+      const usesImplicitSingleLineFit =
+        !hasSpAutoFit && !hasNormAutofit && !hasNoAutofit && isSingleLineTextBody(node.textBody);
+      const usesNoAutofitSingleLineTitleFit =
+        hasNoAutofit && isTitlePlaceholder(node.placeholder) && isSingleLineTextBody(node.textBody);
+      textContainer.style.overflowX = 'visible';
+      // noAutofit means "don't auto-fit" — NOT "clip text". PowerPoint allows text to
+      // overflow the shape boundary visibly.
+      textContainer.style.overflowY = 'visible';
 
-      if (bodyPr) {
-        // Text wrap: only wrap="none" should force single-line.
-        // Title placeholders without explicit wrap should still be allowed to wrap.
-        const wrap = bodyPr.attr('wrap') || (fallbackBp ? fallbackBp.attr('wrap') : null);
-        if (wrap === 'none') {
-          textContainer.style.whiteSpace = 'nowrap';
+      // normAutofit: PowerPoint stores the computed fontScale (1000ths of percent).
+      // Apply it as a CSS transform to shrink text so it fits the shape.
+      let needsDynamicAutofit = false;
+      if (hasNormAutofit && normAutofit) {
+        textContainer.style.overflowY = 'hidden';
+        const fontScale = normAutofit.numAttr('fontScale');
+        const lnSpcReduction = normAutofit.numAttr('lnSpcReduction') ?? 0;
+        if (fontScale != null && fontScale < 100000) {
+          const scale = fontScale / 100000;
+          textContainer.style.transformOrigin = 'top left';
+          appendTransform(textContainer, `scale(${scale})`);
+          // Expand container dimensions so the scaled content fills the original space
+          textContainer.style.width = `${100 / scale}%`;
+          textContainer.style.height = `${100 / scale}%`;
+        } else if (fontScale == null) {
+          // fontScale not stored in XML — PowerPoint computes it at runtime.
+          // We'll measure after DOM insertion and apply dynamic scaling.
+          needsDynamicAutofit = true;
+        }
+        if (lnSpcReduction > 0) {
+          const lnFactor = 1 - lnSpcReduction / 100000;
+          textContainer.style.lineHeight = `${lnFactor}`;
+        }
+      }
+      // spAutoFit requests in-shape text fitting. In browser rendering we cannot
+      // resize the absolutely positioned shape like PowerPoint editor behavior,
+      // so use bounded dynamic scaling to prevent bleed across neighboring nodes.
+      if (hasSpAutoFit && !hasNormAutofit) {
+        if (!spAutoFitAllowsVerticalOverflow) {
+          textContainer.style.overflowY = 'hidden';
+        }
+        needsDynamicAutofit =
+          !spAutoFitAllowsHorizontalOverflow || !spAutoFitAllowsVerticalOverflow;
+      }
+      // When no autofit mode is serialized, PowerPoint still keeps simple
+      // single-line shape labels within the shape bounds instead of wrapping them
+      // into neighboring content. Measure and apply the same bounded shrink.
+      if (usesImplicitSingleLineFit) {
+        textContainer.style.overflowY = 'hidden';
+        needsDynamicAutofit = true;
+      }
+      // Office-authored title placeholders often inherit layout-level noAutofit even
+      // when the title box is visually one line tall. Browser font fallback can make
+      // the same single-line title wrap, so measure it and only shrink when wrapping
+      // would overflow the title box.
+      if (usesNoAutofitSingleLineTitleFit) {
+        needsDynamicAutofit = true;
+      }
+
+      let isVerticalText = false;
+      let textAnchor: string | null | undefined;
+      const isSingleLineSpAutoFit =
+        !!hasSpAutoFit && !hasNormAutofit && isSingleLineTextBody(node.textBody);
+
+      // Apply bodyPr (text body properties)
+      // Use layout/master bodyPr as fallback for missing attributes
+      {
+        if (bodyPr) {
+          // Text wrap: only wrap="none" should force single-line.
+          // Title placeholders without explicit wrap should still be allowed to wrap.
+          const wrap = bodyPr.attr('wrap') || (fallbackBp ? fallbackBp.attr('wrap') : null);
+          if (wrap === 'none') {
+            textContainer.style.whiteSpace = 'nowrap';
+          }
+        }
+
+        // Vertical alignment (anchor): prefer shape's own, then layout placeholder
+        const ownAnchor = bodyPr ? bodyPr.attr('anchor') : undefined;
+        const fallbackAnchor = fallbackBp ? fallbackBp.attr('anchor') : undefined;
+        const anchor = ownAnchor || fallbackAnchor;
+        const hasExplicitTextAnchor = ownAnchor !== undefined || fallbackAnchor !== undefined;
+        textAnchor = anchor;
+        if (anchor === 't') {
+          textContainer.style.justifyContent = 'flex-start';
+        } else if (anchor === 'ctr') {
+          textContainer.style.justifyContent = 'center';
+        } else if (anchor === 'b') {
+          textContainer.style.justifyContent = 'flex-end';
+        }
+
+        // Internal margins (insets): prefer shape's own, then layout, then OOXML defaults
+        const lIns =
+          (bodyPr ? bodyPr.numAttr('lIns') : undefined) ??
+          (fallbackBp ? fallbackBp.numAttr('lIns') : undefined);
+        const tIns =
+          (bodyPr ? bodyPr.numAttr('tIns') : undefined) ??
+          (fallbackBp ? fallbackBp.numAttr('tIns') : undefined);
+        const rIns =
+          (bodyPr ? bodyPr.numAttr('rIns') : undefined) ??
+          (fallbackBp ? fallbackBp.numAttr('rIns') : undefined);
+        const bIns =
+          (bodyPr ? bodyPr.numAttr('bIns') : undefined) ??
+          (fallbackBp ? fallbackBp.numAttr('bIns') : undefined);
+
+        // Default insets are 91440 EMU (0.1 inch) for L/R, 45720 EMU (0.05 inch) for T/B
+        const leftPad = lIns !== undefined ? emuToPx(lIns) : emuToPx(91440);
+        const topPad = tIns !== undefined ? emuToPx(tIns) : emuToPx(45720);
+        const rightPad = rIns !== undefined ? emuToPx(rIns) : emuToPx(91440);
+        const bottomPad = bIns !== undefined ? emuToPx(bIns) : emuToPx(45720);
+
+        textContainer.style.paddingLeft = `${leftPad}px`;
+        textContainer.style.paddingTop = `${topPad}px`;
+        textContainer.style.paddingRight = `${rightPad}px`;
+        textContainer.style.paddingBottom = `${bottomPad}px`;
+
+        // Vertical text support (bodyPr@vert)
+        const vert =
+          (bodyPr ? bodyPr.attr('vert') : null) || (fallbackBp ? fallbackBp.attr('vert') : null);
+        if (vert === 'eaVert') {
+          applyVerticalTextFlow(textContainer, textAnchor);
+          isVerticalText = true;
+        } else if (vert === 'vert' || vert === 'wordArtVert') {
+          applyVerticalTextFlow(textContainer, textAnchor);
+          isVerticalText = true;
+        } else if (vert === 'vert270') {
+          applyVerticalTextFlow(textContainer, textAnchor);
+          appendTransform(textContainer, 'rotate(180deg)');
+          isVerticalText = true;
+        }
+
+        if (isSingleLineSpAutoFit && !hasExplicitTextAnchor && !isVerticalText) {
+          textContainer.style.justifyContent = 'center';
         }
       }
 
-      // Vertical alignment (anchor): prefer shape's own, then layout placeholder
-      const anchor =
-        (bodyPr ? bodyPr.attr('anchor') : null) || (fallbackBp ? fallbackBp.attr('anchor') : null);
-      if (anchor === 't') {
+      // Diagram text can carry its own txXfrm rotation; apply it inside the shape wrapper.
+      if (node.textBoxBounds?.rotation && node.textBoxBounds.rotation !== 0) {
+        appendTransform(textContainer, `rotate(${node.textBoxBounds.rotation}deg)`);
+        textContainer.style.transformOrigin = 'center center';
+      }
+
+      // If text was flipped, un-flip the text so it reads correctly
+      // Append to existing transforms (don't overwrite vert270 rotation)
+      if (node.flipH || node.flipV) {
+        const existing = textContainer.style.transform || '';
+        const flipParts: string[] = [];
+        if (node.flipH) flipParts.push('scaleX(-1)');
+        if (node.flipV) flipParts.push('scaleY(-1)');
+        textContainer.style.transform = `${existing} ${flipParts.join(' ')}`.trim();
+      }
+
+      // Resolve fontRef color from shape style element (used by SmartArt diagram shapes
+      // where text color is specified via dsp:style > a:fontRef > a:schemeClr).
+      let fontRefColor: string | undefined;
+      const shapeStyle = node.source.child('style');
+      if (shapeStyle.exists()) {
+        const fontRef = shapeStyle.child('fontRef');
+        if (fontRef.exists() && fontRef.allChildren().length > 0) {
+          fontRefColor = resolveColorToCss(fontRef, ctx);
+        }
+      }
+
+      const textOptions =
+        fontRefColor || isVerticalText || (hasSpAutoFit && !hasNormAutofit)
+          ? {
+              ...(fontRefColor ? { fontRefColor } : {}),
+              ...(isVerticalText ? { isVerticalText } : {}),
+              ...(hasSpAutoFit && !hasNormAutofit
+                ? {
+                    trimOuterParagraphSpacing: true,
+                    compactSingleLineSpacing: true,
+                    defaultLineHeight: '1',
+                  }
+                : {}),
+            }
+          : undefined;
+
+      renderTextBody(node.textBody, node.placeholder, ctx, textContainer, textOptions);
+      wrapper.appendChild(textContainer);
+
+      // Dynamic normAutofit: when fontScale is not stored in the XML, measure the
+      // rendered text and compute the needed scale so all text fits the container.
+      if (needsDynamicAutofit) {
+        // The wrapper isn't in the DOM yet, so temporarily attach it offscreen to measure.
+        wrapper.style.visibility = 'hidden';
+        document.body.appendChild(wrapper);
+        // Temporarily neutralise vertical alignment so content overflows downward
+        // (flex-end would push content upward, making scrollHeight == clientHeight).
+        const savedJC = textContainer.style.justifyContent;
+        const savedWhiteSpace = textContainer.style.whiteSpace;
         textContainer.style.justifyContent = 'flex-start';
-      } else if (anchor === 'ctr') {
-        textContainer.style.justifyContent = 'center';
-      } else if (anchor === 'b') {
-        textContainer.style.justifyContent = 'flex-end';
-      }
-
-      // Internal margins (insets): prefer shape's own, then layout, then OOXML defaults
-      const lIns =
-        (bodyPr ? bodyPr.numAttr('lIns') : undefined) ??
-        (fallbackBp ? fallbackBp.numAttr('lIns') : undefined);
-      const tIns =
-        (bodyPr ? bodyPr.numAttr('tIns') : undefined) ??
-        (fallbackBp ? fallbackBp.numAttr('tIns') : undefined);
-      const rIns =
-        (bodyPr ? bodyPr.numAttr('rIns') : undefined) ??
-        (fallbackBp ? fallbackBp.numAttr('rIns') : undefined);
-      const bIns =
-        (bodyPr ? bodyPr.numAttr('bIns') : undefined) ??
-        (fallbackBp ? fallbackBp.numAttr('bIns') : undefined);
-
-      // Default insets are 91440 EMU (0.1 inch) for L/R, 45720 EMU (0.05 inch) for T/B
-      const leftPad = lIns !== undefined ? emuToPx(lIns) : emuToPx(91440);
-      const topPad = tIns !== undefined ? emuToPx(tIns) : emuToPx(45720);
-      const rightPad = rIns !== undefined ? emuToPx(rIns) : emuToPx(91440);
-      const bottomPad = bIns !== undefined ? emuToPx(bIns) : emuToPx(45720);
-
-      textContainer.style.paddingLeft = `${leftPad}px`;
-      textContainer.style.paddingTop = `${topPad}px`;
-      textContainer.style.paddingRight = `${rightPad}px`;
-      textContainer.style.paddingBottom = `${bottomPad}px`;
-
-      // Vertical text support (bodyPr@vert)
-      const vert =
-        (bodyPr ? bodyPr.attr('vert') : null) || (fallbackBp ? fallbackBp.attr('vert') : null);
-      if (vert === 'eaVert') {
-        textContainer.style.writingMode = 'vertical-rl';
-      } else if (vert === 'vert' || vert === 'wordArtVert') {
-        textContainer.style.writingMode = 'vertical-rl';
-      } else if (vert === 'vert270') {
-        textContainer.style.writingMode = 'vertical-rl';
-        textContainer.style.transform = (textContainer.style.transform || '') + ' rotate(180deg)';
-      }
-    }
-
-    // Diagram text can carry its own txXfrm rotation; apply it inside the shape wrapper.
-    if (node.textBoxBounds?.rotation && node.textBoxBounds.rotation !== 0) {
-      const existing = textContainer.style.transform || '';
-      textContainer.style.transform =
-        `${existing} rotate(${node.textBoxBounds.rotation}deg)`.trim();
-      textContainer.style.transformOrigin = 'center center';
-    }
-
-    // If text was flipped, un-flip the text so it reads correctly
-    // Append to existing transforms (don't overwrite vert270 rotation)
-    if (node.flipH || node.flipV) {
-      const existing = textContainer.style.transform || '';
-      const flipParts: string[] = [];
-      if (node.flipH) flipParts.push('scaleX(-1)');
-      if (node.flipV) flipParts.push('scaleY(-1)');
-      textContainer.style.transform = (existing + ' ' + flipParts.join(' ')).trim();
-    }
-
-    // Resolve fontRef color from shape style element (used by SmartArt diagram shapes
-    // where text color is specified via dsp:style > a:fontRef > a:schemeClr).
-    let fontRefColor: string | undefined;
-    const shapeStyle = node.source.child('style');
-    if (shapeStyle.exists()) {
-      const fontRef = shapeStyle.child('fontRef');
-      if (fontRef.exists() && fontRef.allChildren().length > 0) {
-        fontRefColor = resolveColorToCss(fontRef, ctx);
-      }
-    }
-
-    renderTextBody(
-      node.textBody,
-      node.placeholder,
-      ctx,
-      textContainer,
-      fontRefColor ? { fontRefColor } : undefined,
-    );
-    wrapper.appendChild(textContainer);
-
-    // Dynamic normAutofit: when fontScale is not stored in the XML, measure the
-    // rendered text and compute the needed scale so all text fits the container.
-    if (needsDynamicAutofit) {
-      // The wrapper isn't in the DOM yet, so temporarily attach it offscreen to measure.
-      wrapper.style.visibility = 'hidden';
-      document.body.appendChild(wrapper);
-      // Temporarily neutralise vertical alignment so content overflows downward
-      // (flex-end would push content upward, making scrollHeight == clientHeight).
-      const savedJC = textContainer.style.justifyContent;
-      textContainer.style.justifyContent = 'flex-start';
-      const containerH = textContainer.clientHeight;
-      const contentH = textContainer.scrollHeight;
-      textContainer.style.justifyContent = savedJC;
-      document.body.removeChild(wrapper);
-      wrapper.style.visibility = '';
-      if (contentH > containerH && containerH > 0) {
-        const scale = containerH / contentH;
-        textContainer.style.transformOrigin = 'top left';
-        textContainer.style.transform = `scale(${scale})`;
-        textContainer.style.width = `${100 / scale}%`;
-        textContainer.style.height = `${100 / scale}%`;
+        const containerW = textContainer.clientWidth;
+        const containerH = textContainer.clientHeight;
+        const wrappedContentH = textContainer.scrollHeight;
+        const wrappedContentW = textContainer.scrollWidth;
+        let contentW = wrappedContentW;
+        let contentH = wrappedContentH;
+        const wrappedWidthFits = containerW > 0 && wrappedContentW <= containerW;
+        const wrappedHeightFits =
+          containerH > 0 &&
+          (wrappedContentH <= containerH ||
+            (wrappedWidthFits && wrappedContentH <= containerH * WRAPPED_AUTOFIT_HEIGHT_TOLERANCE));
+        const wrappedFits =
+          containerW > 0 && containerH > 0 && wrappedWidthFits && wrappedHeightFits;
+        const shouldMeasureUnwrappedWidth =
+          !isVerticalText &&
+          !spAutoFitAllowsHorizontalOverflow &&
+          !wrappedFits &&
+          (!wrappedWidthFits ||
+            isSingleLineSpAutoFit ||
+            usesImplicitSingleLineFit ||
+            usesNoAutofitSingleLineTitleFit);
+        if (shouldMeasureUnwrappedWidth) {
+          textContainer.style.whiteSpace = 'nowrap';
+          contentW = textContainer.scrollWidth;
+          contentH = textContainer.scrollHeight;
+          textContainer.style.whiteSpace = savedWhiteSpace;
+        }
+        textContainer.style.justifyContent = savedJC;
+        document.body.removeChild(wrapper);
+        wrapper.style.visibility = '';
+        let scale = 1;
+        const fitWidthOnly = usesNoAutofitSingleLineTitleFit;
+        if (!spAutoFitAllowsHorizontalOverflow && contentW > containerW && containerW > 0) {
+          scale = Math.min(scale, containerW / contentW);
+        }
+        if (
+          !fitWidthOnly &&
+          !spAutoFitAllowsVerticalOverflow &&
+          !wrappedHeightFits &&
+          contentH > containerH &&
+          containerH > 0
+        ) {
+          scale = Math.min(scale, containerH / contentH);
+        }
+        if (
+          !fitWidthOnly &&
+          !spAutoFitAllowsVerticalOverflow &&
+          scale === 1 &&
+          !wrappedHeightFits &&
+          wrappedContentH > containerH &&
+          containerH > 0
+        ) {
+          scale = containerH / wrappedContentH;
+        }
+        if (scale < 1) {
+          if (!textContainer.style.transform) {
+            textContainer.style.transformOrigin = 'top left';
+          }
+          appendTransform(textContainer, `scale(${scale})`);
+          textContainer.style.width = `${100 / scale}%`;
+          textContainer.style.height = `${100 / scale}%`;
+        }
       }
     }
   }

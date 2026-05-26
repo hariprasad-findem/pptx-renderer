@@ -478,6 +478,48 @@ describe('renderTable', () => {
       expect(td.textContent).toContain('Cell Text');
     });
 
+    it('uses Office single line spacing for table cell text without explicit line spacing', () => {
+      const rows: TableRow[] = [{
+        height: 0,
+        cells: [{
+          gridSpan: 1,
+          rowSpan: 1,
+          hMerge: false,
+          vMerge: false,
+          textBody: { paragraphs: [{ runs: [{ text: 'Auto row height text' }], level: 0 }] },
+        }],
+      }];
+
+      const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+      const paragraph = el.querySelector('td div') as HTMLElement;
+
+      expect(paragraph.style.lineHeight).toBe('1');
+    });
+
+    it('preserves explicit table cell line spacing over the Office default', () => {
+      const rows: TableRow[] = [{
+        height: 0,
+        cells: [{
+          gridSpan: 1,
+          rowSpan: 1,
+          hMerge: false,
+          vMerge: false,
+          textBody: {
+            paragraphs: [{
+              properties: parseXml('<pPr><lnSpc><spcPct val="150000"/></lnSpc></pPr>'),
+              runs: [{ text: 'Explicit line spacing' }],
+              level: 0,
+            }],
+          },
+        }],
+      }];
+
+      const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+      const paragraph = el.querySelector('td div') as HTMLElement;
+
+      expect(parseFloat(paragraph.style.lineHeight)).toBeCloseTo(1.5, 3);
+    });
+
     // -----------------------------------------------------------------------
     // getEffectiveTableStyleTextColor — alpha < 1 branch (rgba return)
     // -----------------------------------------------------------------------
@@ -592,6 +634,41 @@ describe('renderTable', () => {
       const td = el.querySelector('td')!;
       // fillRef resolves srgbClr CC8800 = rgb(204,136,0)
       expect(td.style.backgroundColor).toBe('rgb(204, 136, 0)');
+    });
+
+    it('applyStyleFill: resolves fillRef idx through theme fill style', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{FILLREF_GRAD}">
+            <wholeTbl>
+              <tcStyle>
+                <fill>
+                  <fillRef idx="2"><schemeClr val="accent1"/></fillRef>
+                </fill>
+              </tcStyle>
+            </wholeTbl>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      ctx.theme.fillStyles = [
+        parseXml(`<solidFill><schemeClr val="phClr"/></solidFill>`),
+        parseXml(`
+          <gradFill>
+            <gsLst>
+              <gs pos="0"><schemeClr val="phClr"/></gs>
+              <gs pos="100000"><schemeClr val="phClr"><tint val="50000"/></schemeClr></gs>
+            </gsLst>
+            <lin ang="5400000"/>
+          </gradFill>
+        `),
+      ];
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_GRAD}' }), ctx);
+      const td = el.querySelector('td')!;
+      expect(td.style.background).toContain('linear-gradient');
     });
 
     it('applyStyleFill: applies fillRef with alpha < 1 as rgba background', () => {
@@ -1123,6 +1200,35 @@ describe('renderTable', () => {
       const table = el.querySelector('table')!;
       // 33=51, 44=68, 55=85
       expect(table.style.backgroundColor).toBe('rgb(51, 68, 85)');
+    });
+
+    it('applies table background from tblBg fillRef theme fill style', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{TBLBG_GRAD}">
+            <tblBg><fillRef idx="2"><schemeClr val="accent1"/></fillRef></tblBg>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      ctx.theme.fillStyles = [
+        parseXml(`<solidFill><schemeClr val="phClr"/></solidFill>`),
+        parseXml(`
+          <gradFill>
+            <gsLst>
+              <gs pos="0"><schemeClr val="phClr"/></gs>
+              <gs pos="100000"><schemeClr val="phClr"><tint val="50000"/></schemeClr></gs>
+            </gsLst>
+            <lin ang="5400000"/>
+          </gradFill>
+        `),
+      ];
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_GRAD}' }), ctx);
+      const table = el.querySelector('table')!;
+      expect(table.style.background).toContain('linear-gradient');
     });
 
     it('applies table background from tblBg solidFill with alpha < 1 as rgba', () => {

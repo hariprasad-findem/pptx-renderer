@@ -43,7 +43,8 @@ function mockLoadedZipWithoutPrivateSizes(files: Record<string, string | Uint8Ar
 
 describe('parseZip – categorization', () => {
   it('parses presentation.xml into result.presentation', async () => {
-    const presentationXml = '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="9144000" cy="6858000"/></p:presentation>';
+    const presentationXml =
+      '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="9144000" cy="6858000"/></p:presentation>';
     const buffer = await buildZip([
       { path: '[Content_Types].xml', data: '<Types />' },
       { path: 'ppt/presentation.xml', data: presentationXml },
@@ -56,11 +57,9 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses ppt/slides/slide1.xml into result.slides', async () => {
-    const slideXml = '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld /></p:sld>';
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/slides/slide1.xml', data: slideXml },
-    ]);
+    const slideXml =
+      '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld /></p:sld>';
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/slides/slide1.xml', data: slideXml }]);
 
     const files = await parseZip(buffer);
 
@@ -85,7 +84,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses slide rels (ppt/slides/_rels/slide1.xml.rels) into result.slideRels', async () => {
-    const relsXml = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="layout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
+    const relsXml =
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="layout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
     const buffer = await buildZip([
       ...SKELETON,
       { path: 'ppt/slides/slide1.xml', data: '<p:sld />' },
@@ -167,11 +167,9 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses themes (ppt/theme/theme1.xml) into result.themes', async () => {
-    const themeXml = '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme" />';
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/theme/theme1.xml', data: themeXml },
-    ]);
+    const themeXml =
+      '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme" />';
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/theme/theme1.xml', data: themeXml }]);
 
     const files = await parseZip(buffer);
 
@@ -182,20 +180,13 @@ describe('parseZip – categorization', () => {
   it('parses media files (ppt/media/*) as Uint8Array in result.media', async () => {
     // A minimal 1×1 white PNG (89 bytes)
     const pngBytes = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-      0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,
-      0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-      0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-      0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
-      0x44, 0xae, 0x42, 0x60, 0x82,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+      0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8,
+      0xcf, 0xc0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, 0x33, 0x00, 0x00, 0x00,
+      0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ]);
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/media/image1.png', data: pngBytes },
-    ]);
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/media/image1.png', data: pngBytes }]);
 
     const files = await parseZip(buffer);
 
@@ -206,7 +197,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses tableStyles.xml into result.tableStyles', async () => {
-    const tableStylesXml = '<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" />';
+    const tableStylesXml =
+      '<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" />';
     const buffer = await buildZip([
       ...SKELETON,
       { path: 'ppt/tableStyles.xml', data: tableStylesXml },
@@ -226,11 +218,9 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses charts (ppt/charts/chart1.xml) into result.charts', async () => {
-    const chartXml = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/charts/chart1.xml', data: chartXml },
-    ]);
+    const chartXml =
+      '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/charts/chart1.xml', data: chartXml }]);
 
     const files = await parseZip(buffer);
 
@@ -239,11 +229,9 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses chart style files (ppt/charts/style1.xml) into result.chartStyles', async () => {
-    const styleXml = '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" id="102" />';
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/charts/style1.xml', data: styleXml },
-    ]);
+    const styleXml =
+      '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" id="102" />';
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/charts/style1.xml', data: styleXml }]);
 
     const files = await parseZip(buffer);
 
@@ -252,7 +240,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses chart color files (ppt/charts/colors1.xml) into result.chartColors', async () => {
-    const colorsXml = '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" meth="cycle" id="10" />';
+    const colorsXml =
+      '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" meth="cycle" id="10" />';
     const buffer = await buildZip([
       ...SKELETON,
       { path: 'ppt/charts/colors1.xml', data: colorsXml },
@@ -287,7 +276,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses diagram drawings (ppt/diagrams/drawing1.xml) into result.diagramDrawings', async () => {
-    const drawingXml = '<dgm:drawing xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" />';
+    const drawingXml =
+      '<dgm:drawing xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" />';
     const buffer = await buildZip([
       ...SKELETON,
       { path: 'ppt/diagrams/drawing1.xml', data: drawingXml },
@@ -300,7 +290,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses [Content_Types].xml into result.contentTypes', async () => {
-    const contentTypesXml = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>';
+    const contentTypesXml =
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>';
     const buffer = await buildZip([
       { path: '[Content_Types].xml', data: contentTypesXml },
       { path: 'ppt/presentation.xml', data: '<p:presentation />' },
@@ -313,7 +304,8 @@ describe('parseZip – categorization', () => {
   });
 
   it('parses presentation rels into result.presentationRels', async () => {
-    const relsXml = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="slide" Target="slides/slide1.xml"/></Relationships>';
+    const relsXml =
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="slide" Target="slides/slide1.xml"/></Relationships>';
     const buffer = await buildZip([
       { path: '[Content_Types].xml', data: '<Types />' },
       { path: 'ppt/presentation.xml', data: '<p:presentation />' },
@@ -459,9 +451,7 @@ describe('parseZip limits', () => {
     // SKELETON has 3 entries; limit to 2 to trigger the guard.
     const buffer = await buildZip([...SKELETON]);
 
-    await expect(
-      parseZip(buffer, { maxEntries: 2 }),
-    ).rejects.toThrow(/maxEntries/);
+    await expect(parseZip(buffer, { maxEntries: 2 })).rejects.toThrow(/maxEntries/);
   });
 
   it('does not throw when entry count equals maxEntries exactly', async () => {
@@ -479,9 +469,9 @@ describe('parseZip limits', () => {
       { path: 'ppt/_rels/presentation.xml.rels', data: '<Relationships />' },
     ]);
 
-    await expect(
-      parseZip(buffer, { maxTotalUncompressedBytes: 1024 }),
-    ).rejects.toThrow(/maxTotalUncompressedBytes/);
+    await expect(parseZip(buffer, { maxTotalUncompressedBytes: 1024 })).rejects.toThrow(
+      /maxTotalUncompressedBytes/,
+    );
   });
 
   it('enforces maxEntryUncompressedBytes on text entries when pre-scan size is unavailable', async () => {
@@ -491,9 +481,9 @@ describe('parseZip limits', () => {
       'ppt/_rels/presentation.xml.rels': '<Relationships />',
     });
 
-    await expect(
-      parseZip(new ArrayBuffer(0), { maxEntryUncompressedBytes: 1024 }),
-    ).rejects.toThrow(/maxEntryUncompressedBytes/);
+    await expect(parseZip(new ArrayBuffer(0), { maxEntryUncompressedBytes: 1024 })).rejects.toThrow(
+      /maxEntryUncompressedBytes/,
+    );
   });
 
   it('enforces maxTotalUncompressedBytes across text entries when pre-scan sizes are unavailable', async () => {
@@ -503,9 +493,9 @@ describe('parseZip limits', () => {
       'ppt/_rels/presentation.xml.rels': 'x'.repeat(600),
     });
 
-    await expect(
-      parseZip(new ArrayBuffer(0), { maxTotalUncompressedBytes: 1024 }),
-    ).rejects.toThrow(/maxTotalUncompressedBytes/);
+    await expect(parseZip(new ArrayBuffer(0), { maxTotalUncompressedBytes: 1024 })).rejects.toThrow(
+      /maxTotalUncompressedBytes/,
+    );
   });
 
   it('enforces maxMediaBytes: throws when total media bytes exceed limit', async () => {
@@ -517,17 +507,12 @@ describe('parseZip limits', () => {
       { path: 'ppt/media/image1.png', data: media },
     ]);
 
-    await expect(
-      parseZip(buffer, { maxMediaBytes: 1024 }),
-    ).rejects.toThrow(/maxMediaBytes/);
+    await expect(parseZip(buffer, { maxMediaBytes: 1024 })).rejects.toThrow(/maxMediaBytes/);
   });
 
   it('does not throw for media when maxMediaBytes is not set', async () => {
     const media = new Uint8Array(4096);
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/media/image1.png', data: media },
-    ]);
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/media/image1.png', data: media }]);
 
     await expect(parseZip(buffer)).resolves.toBeDefined();
   });
@@ -541,17 +526,13 @@ describe('parseZip limits', () => {
       { path: 'ppt/media/image2.png', data: chunk },
     ]);
 
-    await expect(
-      parseZip(buffer, { maxMediaBytes: 1000 }),
-    ).rejects.toThrow(/maxMediaBytes/);
+    await expect(parseZip(buffer, { maxMediaBytes: 1000 })).rejects.toThrow(/maxMediaBytes/);
   });
 
   it('throws when maxConcurrency is 0 (invalid)', async () => {
     const buffer = await buildZip([...SKELETON]);
 
-    await expect(
-      parseZip(buffer, { maxConcurrency: 0 }),
-    ).rejects.toThrow(/maxConcurrency/);
+    await expect(parseZip(buffer, { maxConcurrency: 0 })).rejects.toThrow(/maxConcurrency/);
   });
 
   it('accepts maxConcurrency of 1 (minimum valid value)', async () => {
@@ -567,28 +548,20 @@ describe('parseZip limits', () => {
 
   it('enforces maxEntryUncompressedBytes: throws when a single entry exceeds limit', async () => {
     const bigSlide = '<p:sld>' + 'x'.repeat(5000) + '</p:sld>';
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/slides/slide1.xml', data: bigSlide },
-    ]);
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/slides/slide1.xml', data: bigSlide }]);
 
-    await expect(
-      parseZip(buffer, { maxEntryUncompressedBytes: 1000 }),
-    ).rejects.toThrow(/maxEntryUncompressedBytes/);
+    await expect(parseZip(buffer, { maxEntryUncompressedBytes: 1000 })).rejects.toThrow(
+      /maxEntryUncompressedBytes/,
+    );
   });
 
   it('does not throw when single entry size equals maxEntryUncompressedBytes exactly', async () => {
     // Build a zip where we know the entry size
     const data = 'x'.repeat(500);
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/slides/slide1.xml', data },
-    ]);
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/slides/slide1.xml', data }]);
 
     // Use a generous limit that covers all entries
-    await expect(
-      parseZip(buffer, { maxEntryUncompressedBytes: 100000 }),
-    ).resolves.toBeDefined();
+    await expect(parseZip(buffer, { maxEntryUncompressedBytes: 100000 })).resolves.toBeDefined();
   });
 
   it('enforces maxEntryUncompressedBytes on media entries with unknown pre-scan size', async () => {
@@ -596,14 +569,11 @@ describe('parseZip limits', () => {
     // The pre-scan may or may not know the size; the fallback check in the
     // media handler should catch it either way.
     const bigMedia = new Uint8Array(3000);
-    const buffer = await buildZip([
-      ...SKELETON,
-      { path: 'ppt/media/image1.png', data: bigMedia },
-    ]);
+    const buffer = await buildZip([...SKELETON, { path: 'ppt/media/image1.png', data: bigMedia }]);
 
-    await expect(
-      parseZip(buffer, { maxEntryUncompressedBytes: 1000 }),
-    ).rejects.toThrow(/maxEntryUncompressedBytes/);
+    await expect(parseZip(buffer, { maxEntryUncompressedBytes: 1000 })).rejects.toThrow(
+      /maxEntryUncompressedBytes/,
+    );
   });
 
   it('enforces maxMediaBytes on media entries whose size was not known during pre-scan', async () => {
@@ -618,17 +588,13 @@ describe('parseZip limits', () => {
     ]);
 
     // Both media files combined exceed the limit
-    await expect(
-      parseZip(buffer, { maxMediaBytes: 800 }),
-    ).rejects.toThrow(/maxMediaBytes/);
+    await expect(parseZip(buffer, { maxMediaBytes: 800 })).rejects.toThrow(/maxMediaBytes/);
   });
 
   it('throws on non-integer maxConcurrency (e.g. 2.5)', async () => {
     const buffer = await buildZip([...SKELETON]);
 
-    await expect(
-      parseZip(buffer, { maxConcurrency: 2.5 }),
-    ).rejects.toThrow(/maxConcurrency/);
+    await expect(parseZip(buffer, { maxConcurrency: 2.5 })).rejects.toThrow(/maxConcurrency/);
   });
 });
 
@@ -646,8 +612,11 @@ describe('parseZip – full round-trip with representative PPTX structure', () =
     const slideXml = '<p:sld />';
     const slideRelsXml = '<Relationships />';
     const chartXml = '<c:chartSpace />';
+    const chartRelsXml =
+      '<Relationships><Relationship Id="rId1" Type="themeOverride" Target="../theme/themeOverride1.xml"/></Relationships>';
     const chartStyleXml = '<cs:chartStyle id="102" />';
     const chartColorsXml = '<cs:colorStyle id="10" />';
+    const themeOverrideXml = '<a:themeOverride name="ChartTheme" />';
     const drawingXml = '<dgm:drawing />';
     const tableStylesXml = '<a:tblStyleLst def="{ABC}" />';
     const mediaBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]); // JPEG SOI marker
@@ -664,8 +633,10 @@ describe('parseZip – full round-trip with representative PPTX structure', () =
       { path: 'ppt/slides/slide1.xml', data: slideXml },
       { path: 'ppt/slides/_rels/slide1.xml.rels', data: slideRelsXml },
       { path: 'ppt/charts/chart1.xml', data: chartXml },
+      { path: 'ppt/charts/_rels/chart1.xml.rels', data: chartRelsXml },
       { path: 'ppt/charts/style1.xml', data: chartStyleXml },
       { path: 'ppt/charts/colors1.xml', data: chartColorsXml },
+      { path: 'ppt/theme/themeOverride1.xml', data: themeOverrideXml },
       { path: 'ppt/diagrams/drawing1.xml', data: drawingXml },
       { path: 'ppt/tableStyles.xml', data: tableStylesXml },
       { path: 'ppt/media/photo.jpg', data: mediaBytes },
@@ -675,14 +646,20 @@ describe('parseZip – full round-trip with representative PPTX structure', () =
 
     expect(files.themes.get('ppt/theme/theme1.xml')).toBe(themeXml);
     expect(files.slideMasters.get('ppt/slideMasters/slideMaster1.xml')).toBe(masterXml);
-    expect(files.slideMasterRels.get('ppt/slideMasters/_rels/slideMaster1.xml.rels')).toBe(masterRelsXml);
+    expect(files.slideMasterRels.get('ppt/slideMasters/_rels/slideMaster1.xml.rels')).toBe(
+      masterRelsXml,
+    );
     expect(files.slideLayouts.get('ppt/slideLayouts/slideLayout1.xml')).toBe(layoutXml);
-    expect(files.slideLayoutRels.get('ppt/slideLayouts/_rels/slideLayout1.xml.rels')).toBe(layoutRelsXml);
+    expect(files.slideLayoutRels.get('ppt/slideLayouts/_rels/slideLayout1.xml.rels')).toBe(
+      layoutRelsXml,
+    );
     expect(files.slides.get('ppt/slides/slide1.xml')).toBe(slideXml);
     expect(files.slideRels.get('ppt/slides/_rels/slide1.xml.rels')).toBe(slideRelsXml);
     expect(files.charts.get('ppt/charts/chart1.xml')).toBe(chartXml);
+    expect(files.chartRels?.get('ppt/charts/_rels/chart1.xml.rels')).toBe(chartRelsXml);
     expect(files.chartStyles.get('ppt/charts/style1.xml')).toBe(chartStyleXml);
     expect(files.chartColors.get('ppt/charts/colors1.xml')).toBe(chartColorsXml);
+    expect(files.themeOverrides?.get('ppt/theme/themeOverride1.xml')).toBe(themeOverrideXml);
     expect(files.diagramDrawings.get('ppt/diagrams/drawing1.xml')).toBe(drawingXml);
     expect(files.tableStyles).toBe(tableStylesXml);
     expect(files.media.get('ppt/media/photo.jpg')).toEqual(mediaBytes);

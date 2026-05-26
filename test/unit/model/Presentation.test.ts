@@ -122,6 +122,27 @@ describe('buildPresentation', () => {
     expect(pres.height).toBeCloseTo(720, 0);
   });
 
+  it('parses presentation-level default text style', () => {
+    const pres = buildPresentation(
+      makeMinimalFiles({
+        presentation: `
+          <Presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <sldSz cx="9144000" cy="6858000"/>
+            <defaultTextStyle>
+              <lvl1pPr><defRPr sz="1800"/></lvl1pPr>
+            </defaultTextStyle>
+            <sldIdLst>
+              <sldId id="256" r:id="rId2"/>
+            </sldIdLst>
+          </Presentation>
+        `,
+      }),
+    );
+
+    expect(pres.defaultTextStyle?.exists()).toBe(true);
+    expect(pres.defaultTextStyle?.child('lvl1pPr').child('defRPr').attr('sz')).toBe('1800');
+  });
+
   it('parses one slide with one shape', () => {
     const pres = buildPresentation(makeMinimalFiles());
     expect(pres.slides).toHaveLength(1);
@@ -186,7 +207,10 @@ describe('buildPresentation', () => {
         ['ppt/slides/slide2.xml', slide2Xml],
       ]),
       slideRels: new Map([
-        ['ppt/slides/_rels/slide1.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`],
+        [
+          'ppt/slides/_rels/slide1.xml.rels',
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+        ],
         ['ppt/slides/_rels/slide2.xml.rels', slide2Rels],
       ]),
     });
@@ -218,7 +242,8 @@ describe('buildPresentation', () => {
 
   it('parses table styles', () => {
     const files = makeMinimalFiles({
-      tableStyles: '<tblStyleLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"><tblStyle styleId="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" styleName="Medium Style 2 - Accent 1"/></tblStyleLst>',
+      tableStyles:
+        '<tblStyleLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"><tblStyle styleId="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" styleName="Medium Style 2 - Accent 1"/></tblStyleLst>',
     } as any);
     const pres = buildPresentation(files);
     expect(pres.tableStyles).toBeDefined();
@@ -226,7 +251,12 @@ describe('buildPresentation', () => {
 
   it('parses charts', () => {
     const files = makeMinimalFiles({
-      charts: new Map([['ppt/charts/chart1.xml', '<chartSpace><chart><plotArea><barChart/></plotArea></chart></chartSpace>']]),
+      charts: new Map([
+        [
+          'ppt/charts/chart1.xml',
+          '<chartSpace><chart><plotArea><barChart/></plotArea></chart></chartSpace>',
+        ],
+      ]),
     });
     const pres = buildPresentation(files);
     expect(pres.charts.size).toBe(1);
@@ -935,7 +965,12 @@ describe('buildPresentation', () => {
   describe('chart style and color parsing', () => {
     it('parses chart styles', () => {
       const files = makeMinimalFiles({
-        chartStyles: new Map([['ppt/charts/style1.xml', '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"/>']]),
+        chartStyles: new Map([
+          [
+            'ppt/charts/style1.xml',
+            '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"/>',
+          ],
+        ]),
       } as any);
       const pres = buildPresentation(files);
       expect(pres).toBeDefined();
@@ -943,10 +978,64 @@ describe('buildPresentation', () => {
 
     it('parses chart colors', () => {
       const files = makeMinimalFiles({
-        chartColors: new Map([['ppt/charts/colors1.xml', '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"/>']]),
+        chartColors: new Map([
+          [
+            'ppt/charts/colors1.xml',
+            '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"/>',
+          ],
+        ]),
       } as any);
       const pres = buildPresentation(files);
       expect(pres).toBeDefined();
+    });
+
+    it('maps chart themeOverride relationships to chart-local themes', () => {
+      const chartXml =
+        '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
+      const chartRelsXml = `
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride" Target="../theme/themeOverride1.xml"/>
+        </Relationships>
+      `;
+      const themeOverrideXml = `
+        <a:themeOverride xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:clrScheme name="Chart">
+            <a:dk1><a:srgbClr val="000000"/></a:dk1>
+            <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+            <a:dk2><a:srgbClr val="0E2841"/></a:dk2>
+            <a:lt2><a:srgbClr val="E8E8E8"/></a:lt2>
+            <a:accent1><a:srgbClr val="156082"/></a:accent1>
+            <a:accent2><a:srgbClr val="E97132"/></a:accent2>
+            <a:accent3><a:srgbClr val="196B24"/></a:accent3>
+            <a:accent4><a:srgbClr val="0F9ED5"/></a:accent4>
+            <a:accent5><a:srgbClr val="A02B93"/></a:accent5>
+            <a:accent6><a:srgbClr val="4EA72E"/></a:accent6>
+            <a:hlink><a:srgbClr val="467886"/></a:hlink>
+            <a:folHlink><a:srgbClr val="96607D"/></a:folHlink>
+          </a:clrScheme>
+          <a:fontScheme name="Chart">
+            <a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
+            <a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
+          </a:fontScheme>
+          <a:fmtScheme name="Chart">
+            <a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
+            <a:lnStyleLst><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
+            <a:effectStyleLst/>
+          </a:fmtScheme>
+        </a:themeOverride>
+      `;
+
+      const pres = buildPresentation(
+        makeMinimalFiles({
+          charts: new Map([['ppt/charts/chart1.xml', chartXml]]),
+          chartRels: new Map([['ppt/charts/_rels/chart1.xml.rels', chartRelsXml]]),
+          themeOverrides: new Map([['ppt/theme/themeOverride1.xml', themeOverrideXml]]),
+        } as any),
+      );
+
+      expect(pres.chartThemes?.get('ppt/charts/chart1.xml')?.colorScheme.get('accent2')).toBe(
+        'E97132',
+      );
     });
   });
 });

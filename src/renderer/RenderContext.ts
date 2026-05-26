@@ -16,6 +16,12 @@ export interface RenderContext {
   theme: ThemeData;
   master: MasterData;
   layout: LayoutData;
+  /** Current OOXML part path used for resolving relationships while rendering this context. */
+  partPath?: string;
+  /** Resolved slide layout part path for the current slide. */
+  layoutPath?: string;
+  /** Resolved slide master part path for the current slide. */
+  masterPath?: string;
   mediaUrlCache: Map<string, string>; // path -> blob URL
   colorCache: Map<string, { color: string; alpha: number }>;
   /** Shared set of live ECharts instances for explicit disposal. */
@@ -63,6 +69,7 @@ export function createRenderContext(
     majorFont: { latin: 'Calibri', ea: '', cs: '' },
     minorFont: { latin: 'Calibri', ea: '', cs: '' },
     fillStyles: [],
+    bgFillStyles: [],
     lineStyles: [],
     effectStyles: [],
   };
@@ -73,6 +80,9 @@ export function createRenderContext(
     theme,
     master,
     layout,
+    partPath: slide.slidePath,
+    layoutPath,
+    masterPath,
     mediaUrlCache: mediaUrlCache ?? new Map(),
     colorCache: new Map(),
     chartInstances,

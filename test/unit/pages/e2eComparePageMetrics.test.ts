@@ -31,4 +31,11 @@ describe('e2e compare metric labels', () => {
     expect(html).toContain('PASS / FAIL');
     expect(html).toContain('DIAGNOSTIC');
   });
+
+  it('persists the selected slide filter in the URL', () => {
+    expect(html).toContain("parseRequestedSlideNumber(params.get('slide'))");
+    expect(html).toContain('applyRequestedSlideFilter(slideCount)');
+    expect(html).toContain("url.searchParams.set('slide', String(slideNumber))");
+    expect(html).toContain("url.searchParams.delete('slide')");
+  });
 });

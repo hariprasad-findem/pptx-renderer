@@ -4,7 +4,7 @@
 
 import { SafeXmlNode } from '../parser/XmlParser';
 import { RenderContext } from './RenderContext';
-import { resolveColor, resolveFill } from './StyleResolver';
+import { resolveColor, resolveFill, resolveThemeBackgroundFillReference } from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { RelEntry } from '../parser/RelParser';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
@@ -19,6 +19,18 @@ function compositeOnWhite(r: number, g: number, b: number, a: number): string {
   const cg = Math.round(g * a + 255 * (1 - a));
   const cb = Math.round(b * a + 255 * (1 - a));
   return `rgb(${cr},${cg},${cb})`;
+}
+
+function applyBackgroundFillCss(container: HTMLElement, fillCss: string): void {
+  if (
+    fillCss.includes('gradient') ||
+    fillCss.startsWith('url(') ||
+    fillCss.includes('repeating-')
+  ) {
+    container.style.background = fillCss;
+  } else {
+    container.style.backgroundColor = fillCss;
+  }
 }
 
 /**
@@ -119,9 +131,20 @@ function renderBgPr(
 
 /**
  * Render background from bgRef (theme format scheme reference).
- * Simplified: just resolve the color from the reference.
+ * bgRef values 1001+ reference theme bgFillStyleLst; lower values fall back
+ * to regular fillStyleLst for compatibility with non-standard producers.
  */
 function renderBgRef(bgRef: SafeXmlNode, ctx: RenderContext, container: HTMLElement): void {
+  const idx = bgRef.numAttr('idx') ?? 0;
+  const hasThemeFill =
+    (idx >= 1001 && idx - 1000 <= (ctx.theme.bgFillStyles?.length ?? 0)) ||
+    (idx > 0 && idx <= (ctx.theme.fillStyles?.length ?? 0));
+  if (hasThemeFill) {
+    const { fillCss } = resolveThemeBackgroundFillReference(bgRef, ctx);
+    applyBackgroundFillCss(container, fillCss);
+    return;
+  }
+
   // bgRef may contain a color child (schemeClr, srgbClr, etc.)
   const { color, alpha } = resolveColor(bgRef, ctx);
   if (color && color !== '#000000') {

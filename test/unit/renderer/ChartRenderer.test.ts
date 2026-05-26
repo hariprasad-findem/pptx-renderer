@@ -9,7 +9,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseChartXml, renderChart, type ParseChartResult } from '../../../src/renderer/ChartRenderer';
+import {
+  parseChartXml,
+  renderChart,
+  type ParseChartResult,
+} from '../../../src/renderer/ChartRenderer';
 import { createMockRenderContext } from '../helpers/mockContext';
 import { parseXml } from '../../../src/parser/XmlParser';
 import type { RenderContext } from '../../../src/renderer/RenderContext';
@@ -89,9 +93,7 @@ function buildChartSpaceXml(opts: {
   const legendManualLayoutXml = legendManualLayout
     ? `<c:layout><c:manualLayout>${
         legendManualLayout.x !== undefined ? `<c:x val="${legendManualLayout.x}"/>` : ''
-      }${
-        legendManualLayout.y !== undefined ? `<c:y val="${legendManualLayout.y}"/>` : ''
-      }${
+      }${legendManualLayout.y !== undefined ? `<c:y val="${legendManualLayout.y}"/>` : ''}${
         legendManualLayout.w !== undefined ? `<c:w val="${legendManualLayout.w}"/>` : ''
       }${
         legendManualLayout.h !== undefined ? `<c:h val="${legendManualLayout.h}"/>` : ''
@@ -111,13 +113,9 @@ function buildChartSpaceXml(opts: {
     )
     .join('');
 
-  const catPts = categories
-    .map((cat, i) => `<c:pt idx="${i}"><c:v>${cat}</c:v></c:pt>`)
-    .join('');
+  const catPts = categories.map((cat, i) => `<c:pt idx="${i}"><c:v>${cat}</c:v></c:pt>`).join('');
 
-  const valPts = values
-    .map((val, i) => `<c:pt idx="${i}"><c:v>${val}</c:v></c:pt>`)
-    .join('');
+  const valPts = values.map((val, i) => `<c:pt idx="${i}"><c:v>${val}</c:v></c:pt>`).join('');
 
   const catAxTxPrXml = catAxTxPr ? `<c:txPr>${catAxTxPr}</c:txPr>` : '';
   const catAxSpPrXml = catAxSpPr ? `<c:spPr>${catAxSpPr}</c:spPr>` : '';
@@ -126,9 +124,7 @@ function buildChartSpaceXml(opts: {
   const plotAreaManualLayoutXml = plotAreaManualLayout
     ? `<c:layout><c:manualLayout>${
         plotAreaManualLayout.x !== undefined ? `<c:x val="${plotAreaManualLayout.x}"/>` : ''
-      }${
-        plotAreaManualLayout.y !== undefined ? `<c:y val="${plotAreaManualLayout.y}"/>` : ''
-      }${
+      }${plotAreaManualLayout.y !== undefined ? `<c:y val="${plotAreaManualLayout.y}"/>` : ''}${
         plotAreaManualLayout.w !== undefined ? `<c:w val="${plotAreaManualLayout.w}"/>` : ''
       }${
         plotAreaManualLayout.h !== undefined ? `<c:h val="${plotAreaManualLayout.h}"/>` : ''
@@ -1541,6 +1537,57 @@ describe('ChartRenderer', () => {
       expect(series[0].type).toBe('radar');
     });
 
+    it('keeps radar top legend above labels with line icons and unfilled series areas', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>联想</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="E1251B"/></a:solidFill></a:ln></c:spPr>
+                  <c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>功能完备性</c:v></c:pt><c:pt idx="1"><c:v>易用性</c:v></c:pt><c:pt idx="2"><c:v>性能</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>7</c:v></c:pt><c:pt idx="1"><c:v>6</c:v></c:pt><c:pt idx="2"><c:v>7</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:ser>
+                  <c:idx val="1"/><c:order val="1"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>华为</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="00B0F0"/></a:solidFill></a:ln></c:spPr>
+                  <c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>功能完备性</c:v></c:pt><c:pt idx="1"><c:v>易用性</c:v></c:pt><c:pt idx="2"><c:v>性能</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>9</c:v></c:pt><c:pt idx="1"><c:v>8</c:v></c:pt><c:pt idx="2"><c:v>9</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:radarChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+            <c:legend>
+              <c:legendPos val="t"/>
+              <c:layout><c:manualLayout><c:x val="0.1"/><c:y val="0.12"/><c:w val="0.8"/><c:h val="0.08"/></c:manualLayout></c:layout>
+              <c:overlay val="0"/>
+              <c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1000"/></a:pPr></a:p></c:txPr>
+            </c:legend>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const legend = option.legend as any;
+      const radar = option.radar as any;
+      const radarSeries = (option.series as any[])[0];
+
+      expect(radar.center).toEqual(['50%', '66%']);
+      expect(legend.data.every((item: any) => item.icon?.startsWith('path://'))).toBe(true);
+      expect(radarSeries.data[0].lineStyle.color).toBe('#E1251B');
+      expect(radarSeries.data[1].lineStyle.color).toBe('#00B0F0');
+      expect(radarSeries.data[0].areaStyle).toBeUndefined();
+      expect(radarSeries.data[1].areaStyle).toBeUndefined();
+    });
+
     it('should parse scatterChart with xVal and yVal', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -1912,6 +1959,115 @@ describe('ChartRenderer', () => {
           icon: expect.stringMatching(/^path:\/\//),
         }),
       );
+    });
+
+    it('keeps combo line series on its secondary percent axis (ai-computing slide 3)', () => {
+      const legendTxPr = `
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+          <a:pPr>
+            <a:defRPr sz="900">
+              <a:solidFill><a:srgbClr val="595959"/></a:solidFill>
+            </a:defRPr>
+          </a:pPr>
+        </a:p>
+      `;
+      const labelTxPr = `
+        <c:txPr>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr>
+              <a:defRPr sz="600">
+                <a:solidFill><a:srgbClr val="595959"/></a:solidFill>
+              </a:defRPr>
+            </a:pPr>
+          </a:p>
+        </c:txPr>
+      `;
+      const labelShape = `
+        <c:spPr>
+          <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+          <a:ln w="9525">
+            <a:solidFill><a:srgbClr val="BFBFBF"/></a:solidFill>
+          </a:ln>
+        </c:spPr>
+      `;
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:txPr>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p><a:pPr><a:defRPr sz="1200"/></a:pPr></a:p>
+          </c:txPr>
+          <c:chart>
+            <c:plotArea>
+              <c:barChart>
+                <c:barDir val="col"/><c:grouping val="clustered"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>算力</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>2024</c:v></c:pt><c:pt idx="1"><c:v>2025</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>497.1</c:v></c:pt><c:pt idx="1"><c:v>616.6</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:barChart>
+              <c:lineChart>
+                <c:grouping val="standard"/>
+                <c:ser>
+                  <c:idx val="1"/><c:order val="1"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>增速</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:marker><c:symbol val="none"/></c:marker>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>2024</c:v></c:pt><c:pt idx="1"><c:v>2025</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>0.2</c:v></c:pt><c:pt idx="1"><c:v>0.24</c:v></c:pt></c:numCache></c:numRef></c:val>
+                  <c:dLbls>
+                    ${labelShape}
+                    ${labelTxPr}
+                    <c:showVal val="1"/>
+                    <c:showCatName val="0"/>
+                    <c:showSerName val="0"/>
+                    <c:showPercent val="0"/>
+                  </c:dLbls>
+                </c:ser>
+                <c:axId val="3"/><c:axId val="4"/>
+              </c:lineChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/></c:valAx>
+              <c:valAx><c:axId val="4"/><c:delete val="0"/><c:axPos val="r"/><c:tickLblPos val="nextTo"/><c:numFmt formatCode="0%"/><c:crossAx val="3"/></c:valAx>
+              <c:catAx><c:axId val="3"/><c:delete val="1"/><c:axPos val="b"/><c:tickLblPos val="none"/><c:crossAx val="4"/></c:catAx>
+            </c:plotArea>
+            <c:legend><c:legendPos val="b"/><c:txPr>${legendTxPr}</c:txPr><c:overlay val="0"/></c:legend>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = option.series as any[];
+      const yAxis = option.yAxis as any[];
+      const tooltip = option.tooltip as any;
+      const legend = option.legend as any;
+
+      expect(series).toHaveLength(2);
+      expect(series[1].type).toBe('line');
+      expect(series[1].yAxisIndex).toBe(1);
+      expect(series[1].tooltip.valueFormatter(0.24)).toBe('24%');
+      expect(series[1].showSymbol).toBe(true);
+      expect(series[1].symbolSize).toBe(0);
+      expect(series[1].endLabel.show).toBe(false);
+      expect(series[1].label.show).toBe(true);
+      expect(series[1].label.fontSize).toBe(6);
+      expect(series[1].label.backgroundColor).toBe('#FFFFFF');
+      expect(series[1].label.borderColor).toBe('#BFBFBF');
+      expect(series[1].label.borderWidth).toBeGreaterThan(0);
+      expect(series[1].label.formatter({ value: 0.24 })).toBe('24%');
+      expect(Array.isArray(yAxis)).toBe(true);
+      expect(yAxis[1].axisLabel.formatter(0.24)).toBe('24%');
+      expect(yAxis[0].max).toBeGreaterThan(600);
+      expect(yAxis[1].max).toBeLessThanOrEqual(1);
+      expect(tooltip.textStyle.fontSize).toBe(9);
+      expect(tooltip.extraCssText).toContain('font-size: 9px');
+      expect(legend.textStyle.fontSize).toBe(9);
     });
 
     it('should parse pie3DChart', () => {
@@ -2291,6 +2447,163 @@ describe('ChartRenderer', () => {
       const wrapper = renderChart(node, ctx);
       const tables = wrapper.querySelectorAll('table');
       expect(tables.length).toBeGreaterThan(0);
+    });
+
+    it('renders bottom legends as a DOM overlay with the OOXML font size', () => {
+      const ctx = createMockRenderContext();
+      ctx.presentation.charts = new Map([
+        [
+          'ppt/charts/chart1.xml',
+          parseXml(`
+            <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <c:chart>
+                <c:plotArea>
+                  <c:barChart>
+                    <c:grouping val="clustered"/>
+                    <c:ser>
+                      <c:idx val="0"/><c:order val="0"/>
+                      <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>算力</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                      <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>2025</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                      <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>616.6</c:v></c:pt></c:numCache></c:numRef></c:val>
+                    </c:ser>
+                    <c:ser>
+                      <c:idx val="1"/><c:order val="1"/>
+                      <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>增速</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                      <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>2025</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                      <c:val><c:numRef><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>0.24</c:v></c:pt></c:numCache></c:numRef></c:val>
+                    </c:ser>
+                    <c:axId val="1"/><c:axId val="2"/>
+                  </c:barChart>
+                  <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
+                  <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+                </c:plotArea>
+                <c:legend>
+                  <c:legendPos val="b"/>
+                  <c:txPr>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p><a:pPr><a:defRPr sz="900"/></a:pPr></a:p>
+                  </c:txPr>
+                </c:legend>
+              </c:chart>
+            </c:chartSpace>
+          `),
+        ],
+      ]);
+
+      const node: ChartNodeData = {
+        id: 'chart1',
+        name: 'Chart 1',
+        nodeType: 'chart',
+        chartPath: 'ppt/charts/chart1.xml',
+        position: { x: 0, y: 0 },
+        size: { w: 400, h: 300 },
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+      };
+
+      const wrapper = renderChart(node, ctx);
+      const legend = wrapper.querySelector('.pptx-chart-custom-legend') as HTMLElement;
+
+      expect(legend).not.toBeNull();
+      const labels = [...legend.querySelectorAll('span')] as HTMLSpanElement[];
+      expect(legend.style.flexDirection).toBe('row');
+      expect(legend.style.bottom).toBe('15px');
+      expect(legend.style.left).toBe('50%');
+      expect(legend.style.transform).toBe('translateX(-50%)');
+      expect(labels.map((label) => label.textContent)).toEqual(['算力', '增速']);
+      expect(labels.every((label) => label.style.fontSize === '9px')).toBe(true);
+    });
+
+    it('renders radar legend overlay with line marker icons using chart-local theme colors', () => {
+      const ctx = createMockRenderContext();
+      ctx.presentation.chartThemes = new Map([
+        [
+          'ppt/charts/chart1.xml',
+          {
+            ...ctx.theme,
+            colorScheme: new Map([
+              ['accent1', '156082'],
+              ['accent2', 'E97132'],
+            ]),
+          },
+        ],
+      ]);
+      ctx.presentation.charts = new Map([
+        [
+          'ppt/charts/chart1.xml',
+          parseXml(`
+            <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <c:chart>
+                <c:plotArea>
+                  <c:radarChart>
+                    <c:radarStyle val="marker"/>
+                    <c:ser>
+                      <c:idx val="0"/><c:order val="0"/>
+                      <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>联想</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                      <c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="E1251B"/></a:solidFill></a:ln></c:spPr>
+                      <c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>
+                      <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>功能</c:v></c:pt><c:pt idx="1"><c:v>性能</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                      <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>7</c:v></c:pt><c:pt idx="1"><c:v>8</c:v></c:pt></c:numCache></c:numRef></c:val>
+                    </c:ser>
+                      <c:ser>
+                      <c:idx val="1"/><c:order val="1"/>
+                      <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>华为</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                      <c:spPr><a:ln w="19050"><a:solidFill><a:schemeClr val="accent2"/></a:solidFill></a:ln></c:spPr>
+                      <c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:schemeClr val="accent2"/></a:solidFill></c:spPr></c:marker>
+                      <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>功能</c:v></c:pt><c:pt idx="1"><c:v>性能</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                      <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>9</c:v></c:pt><c:pt idx="1"><c:v>9</c:v></c:pt></c:numCache></c:numRef></c:val>
+                    </c:ser>
+                    <c:axId val="1"/><c:axId val="2"/>
+                  </c:radarChart>
+                  <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+                  <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+                </c:plotArea>
+                <c:legend>
+                  <c:legendPos val="t"/>
+                  <c:layout><c:manualLayout><c:x val="0.1"/><c:y val="0.12"/><c:w val="0.8"/><c:h val="0.08"/></c:manualLayout></c:layout>
+                  <c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1000"/></a:pPr></a:p></c:txPr>
+                </c:legend>
+              </c:chart>
+            </c:chartSpace>
+          `),
+        ],
+      ]);
+
+      const node: ChartNodeData = {
+        id: 'chart1',
+        name: 'Chart 1',
+        nodeType: 'chart',
+        chartPath: 'ppt/charts/chart1.xml',
+        position: { x: 0, y: 0 },
+        size: { w: 400, h: 300 },
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+      };
+
+      const wrapper = renderChart(node, ctx);
+      const legend = wrapper.querySelector('.pptx-chart-custom-legend') as HTMLElement;
+      const strokes = [...legend.querySelectorAll('svg path')].map((path) =>
+        path.getAttribute('stroke'),
+      );
+      const markerFills = [...legend.querySelectorAll('svg circle')].map((circle) =>
+        circle.getAttribute('fill'),
+      );
+
+      expect(legend).not.toBeNull();
+      expect(legend.style.flexDirection).toBe('row');
+      expect(legend.style.left).toBe('40px');
+      expect(legend.style.top).toBe('36px');
+      expect(legend.style.width).toBe('320px');
+      expect(legend.style.height).toBe('24px');
+      expect(legend.style.alignItems).toBe('center');
+      expect(legend.style.justifyContent).toBe('center');
+      expect(strokes).toEqual(['#E1251B', '#E97132']);
+      expect(markerFills).toEqual(['#E1251B', '#E97132']);
     });
   });
 

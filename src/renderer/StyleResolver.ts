@@ -738,11 +738,32 @@ export function resolveThemeFillReference(
   ctx: RenderContext,
 ): { fillCss: string; gradientFillData: GradientFillData | null } {
   const idx = fillRef.numAttr('idx') ?? 0;
-  if (idx <= 0 || (ctx.theme.fillStyles?.length ?? 0) < idx) {
+  return resolveThemeFillReferenceFromList(fillRef, ctx, ctx.theme.fillStyles, idx);
+}
+
+export function resolveThemeBackgroundFillReference(
+  bgRef: SafeXmlNode,
+  ctx: RenderContext,
+): { fillCss: string; gradientFillData: GradientFillData | null } {
+  const idx = bgRef.numAttr('idx') ?? 0;
+  if (idx >= 1001) {
+    return resolveThemeFillReferenceFromList(bgRef, ctx, ctx.theme.bgFillStyles ?? [], idx - 1000);
+  }
+
+  return resolveThemeFillReferenceFromList(bgRef, ctx, ctx.theme.fillStyles, idx);
+}
+
+function resolveThemeFillReferenceFromList(
+  fillRef: SafeXmlNode,
+  ctx: RenderContext,
+  fillStyles: SafeXmlNode[] | undefined,
+  idx: number,
+): { fillCss: string; gradientFillData: GradientFillData | null } {
+  if (idx <= 0 || (fillStyles?.length ?? 0) < idx) {
     return { fillCss: resolveColorToCss(fillRef, ctx), gradientFillData: null };
   }
 
-  const themeFill = ctx.theme.fillStyles[idx - 1];
+  const themeFill = fillStyles?.[idx - 1];
   if (!themeFill?.exists()) {
     return { fillCss: resolveColorToCss(fillRef, ctx), gradientFillData: null };
   }

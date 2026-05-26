@@ -6,9 +6,11 @@ import * as echarts from 'echarts';
 import { ChartNodeData } from '../model/nodes/ChartNode';
 import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
+import { emuToPx } from '../parser/units';
 import { resolveColor } from './StyleResolver';
 
 const MAX_CHART_CACHE_POINTS = 10_000;
+const EXPLICIT_FONT_SIZE = Symbol('pptxExplicitFontSize');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +55,29 @@ interface DataLabelConfig {
   color?: string; // text color from dLbls > txPr
   fontSize?: number; // font size from dLbls > txPr > defRPr@sz
   bold?: boolean; // font bold from dLbls > txPr > defRPr@b
+  backgroundColor?: string; // label box fill from dLbls > spPr
+  borderColor?: string; // label box stroke from dLbls > spPr
+  borderWidth?: number; // label box stroke width
+  padding?: [number, number, number, number]; // label text insets from txPr > bodyPr
+}
+
+type ChartTextStyle = {
+  color?: string;
+  fontSize?: number;
+  bold?: boolean;
+  fontFamily?: string;
+  [EXPLICIT_FONT_SIZE]?: true;
+};
+
+function markExplicitFontSize<T extends object>(style: T): T {
+  (style as ChartTextStyle)[EXPLICIT_FONT_SIZE] = true;
+  return style;
+}
+
+function hasExplicitFontSize(style: unknown): boolean {
+  return Boolean(
+    style && typeof style === 'object' && (style as Record<symbol, unknown>)[EXPLICIT_FONT_SIZE],
+  );
 }
 
 interface MutableAxisOption {
@@ -530,11 +555,22 @@ function parseDataLabels(node: SafeXmlNode, ctx: RenderContext): DataLabelConfig
   const color = txStyle?.color ?? extractTxPrColor(dLbls, ctx);
   const fontSize = txStyle?.fontSize;
   const bold = txStyle?.bold;
+  const boxStyle = parseDataLabelBoxStyle(dLbls, ctx);
 
   // If nothing is shown, return undefined
   if (!showVal && !showCatName && !showSerName && !showPercent) return undefined;
 
-  return { showVal, showCatName, showSerName, showPercent, position, color, fontSize, bold };
+  return {
+    showVal,
+    showCatName,
+    showSerName,
+    showPercent,
+    position,
+    color,
+    fontSize,
+    bold,
+    ...boxStyle,
+  };
 }
 
 function parseDlblBoolOptional(dLbl: SafeXmlNode, childName: string): boolean | undefined {
@@ -542,6 +578,46 @@ function parseDlblBoolOptional(dLbl: SafeXmlNode, childName: string): boolean | 
   if (!el.exists()) return undefined;
   const val = el.attr('val');
   return val !== '0' && val !== 'false';
+}
+
+function parseDataLabelBoxStyle(dLbls: SafeXmlNode, ctx: RenderContext): Partial<DataLabelConfig> {
+  const style: Partial<DataLabelConfig> = {};
+  const spPr = dLbls.child('spPr');
+  if (spPr.exists()) {
+    const solidFill = spPr.child('solidFill');
+    if (solidFill.exists()) {
+      const backgroundColor = resolveColorToHex(solidFill, ctx);
+      if (backgroundColor) style.backgroundColor = backgroundColor;
+    }
+
+    const ln = spPr.child('ln');
+    if (ln.exists() && !ln.child('noFill').exists()) {
+      const strokeFill = ln.child('solidFill');
+      if (strokeFill.exists()) {
+        const borderColor = resolveColorToHex(strokeFill, ctx);
+        if (borderColor) style.borderColor = borderColor;
+      }
+      const width = ln.numAttr('w');
+      if (width !== undefined && width > 0) {
+        style.borderWidth = Math.max(1, emuToPx(width));
+      } else if (style.borderColor) {
+        style.borderWidth = 1;
+      }
+    }
+  }
+
+  const bodyPr = dLbls.child('txPr').child('bodyPr');
+  if (bodyPr.exists()) {
+    const top = emuToPx(bodyPr.numAttr('tIns') ?? 0);
+    const right = emuToPx(bodyPr.numAttr('rIns') ?? 0);
+    const bottom = emuToPx(bodyPr.numAttr('bIns') ?? 0);
+    const left = emuToPx(bodyPr.numAttr('lIns') ?? 0);
+    if (top || right || bottom || left) {
+      style.padding = [top, right, bottom, left];
+    }
+  }
+
+  return style;
 }
 
 /**
@@ -575,6 +651,7 @@ function parsePointDataLabelOverrides(
     }
     if (txStyle?.fontSize !== undefined) cfg.fontSize = txStyle.fontSize;
     if (txStyle?.bold !== undefined) cfg.bold = txStyle.bold;
+    Object.assign(cfg, parseDataLabelBoxStyle(dLbl, ctx));
     if (Object.keys(cfg).length > 0) out.set(idx, cfg);
   }
   return out;
@@ -757,10 +834,7 @@ function extractTitleManualLayout(chartNode: SafeXmlNode): Partial<Record<'left'
  * Extract text color/font size from a txPr node:
  * txPr > p > pPr > defRPr (solidFill + sz).
  */
-function extractTxPrStyle(
-  parentNode: SafeXmlNode,
-  ctx: RenderContext,
-): { color?: string; fontSize?: number; bold?: boolean; fontFamily?: string } | undefined {
+function extractTxPrStyle(parentNode: SafeXmlNode, ctx: RenderContext): ChartTextStyle | undefined {
   const txPr = parentNode.child('txPr');
   if (!txPr.exists()) return undefined;
 
@@ -770,7 +844,7 @@ function extractTxPrStyle(
     const defRPr = pPr.child('defRPr');
     if (!defRPr.exists()) continue;
 
-    const style: { color?: string; fontSize?: number; bold?: boolean; fontFamily?: string } = {};
+    const style: ChartTextStyle = {};
     const fill = defRPr.child('solidFill');
     if (fill.exists()) {
       const c = resolveColorToHex(fill, ctx);
@@ -780,6 +854,7 @@ function extractTxPrStyle(
     if (sz !== undefined && sz > 0) {
       // OOXML sz is 1/100 pt. Keep renderer's existing px-scale convention.
       style.fontSize = Math.round(sz / 100);
+      style[EXPLICIT_FONT_SIZE] = true;
     }
     const b = defRPr.attr('b');
     if (b === '1' || b === 'true') style.bold = true;
@@ -820,11 +895,8 @@ function getChartThemeFontFamily(ctx: RenderContext): string | undefined {
 interface LegendInfo {
   option: echarts.EChartsOption['legend'];
   overlay: boolean; // true = legend overlaps plot area (don't reserve grid space)
-  textStyle?: {
-    color?: string;
-    fontSize?: number;
+  textStyle?: ChartTextStyle & {
     fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number;
-    fontFamily?: string;
   };
   manualLayout?: Partial<Record<'left' | 'top' | 'width' | 'height', string>>;
 }
@@ -872,12 +944,16 @@ function extractLegendInfo(chartNode: SafeXmlNode, ctx: RenderContext): LegendIn
     textStyle: (() => {
       const s = extractTxPrStyle(legend, ctx);
       if (!s) return undefined;
-      return {
+      const textStyle: ChartTextStyle & {
+        fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number;
+      } = {
         ...(s.color ? { color: s.color } : {}),
         ...(s.fontSize !== undefined ? { fontSize: s.fontSize } : {}),
         ...(s.bold === true ? { fontWeight: 'bold' } : {}),
         ...(s.fontFamily ? { fontFamily: s.fontFamily } : {}),
       };
+      if (hasExplicitFontSize(s)) textStyle[EXPLICIT_FONT_SIZE] = true;
+      return textStyle;
     })(),
     manualLayout: extractLegendManualLayout(legend),
   };
@@ -1019,12 +1095,9 @@ function buildLegendOption(
   legendOpt: echarts.EChartsOption['legend'] | undefined,
   legendInfo: LegendInfo | undefined,
   legendTopPx: number | undefined,
-  data: (string | { name: string; icon?: string })[],
-  textStyle: {
-    color?: string;
-    fontSize?: number;
+  data: (string | { name: string; icon?: string; marker?: string })[],
+  textStyle: ChartTextStyle & {
     fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number;
-    fontFamily?: string;
   },
 ): echarts.EChartsOption['legend'] {
   if (!legendOpt) return { show: false };
@@ -1066,12 +1139,14 @@ function buildLegendOption(
 
 type LegendOptionObject = {
   show?: boolean;
-  data?: (string | { name: string; icon?: string })[];
+  data?: (string | { name: string; icon?: string; marker?: string })[];
   orient?: 'horizontal' | 'vertical';
   left?: string | number;
   right?: string | number;
   top?: string | number;
   bottom?: string | number;
+  width?: string | number;
+  height?: string | number;
   icon?: string;
   itemWidth?: number;
   itemHeight?: number;
@@ -1094,8 +1169,21 @@ function pickSeriesStringColor(color: string | object | undefined, fallback: str
   return typeof color === 'string' ? color : fallback;
 }
 
+function pickVisualStringColor(
+  visual: Record<string, unknown> | undefined,
+  fallback: string,
+): string {
+  const lineStyle = (visual?.lineStyle as Record<string, unknown> | undefined) ?? {};
+  const itemStyle = (visual?.itemStyle as Record<string, unknown> | undefined) ?? {};
+  return (
+    (typeof lineStyle.color === 'string' ? lineStyle.color : undefined) ??
+    (typeof itemStyle.color === 'string' ? itemStyle.color : undefined) ??
+    fallback
+  );
+}
+
 function lineLegendIconPath(): string {
-  return 'path://M2 8 L22 8';
+  return 'path://M2 4.5 L22 4.5';
 }
 
 function buildSmoothScatterLineData(data: number[][], stepsPerSegment = 24): number[][] {
@@ -1226,17 +1314,44 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   };
 }
 
+function getChartAxisIds(chartTypeNode?: SafeXmlNode): string[] {
+  if (!chartTypeNode?.exists()) return [];
+  return chartTypeNode
+    .children('axId')
+    .map((ax) => ax.attr('val'))
+    .filter((id): id is string => id !== undefined && id !== '');
+}
+
+function findAxisById(
+  plotArea: SafeXmlNode,
+  axisNames: readonly string[],
+  axisId: string | undefined,
+): SafeXmlNode {
+  for (const axisName of axisNames) {
+    const axes = plotArea.children(axisName);
+    if (axisId) {
+      const matched = axes.find((axis) => axis.child('axId').attr('val') === axisId);
+      if (matched) return matched;
+    }
+    if (axes[0]?.exists()) return axes[0];
+  }
+  return new SafeXmlNode(null);
+}
+
 /** Parse value axis and category axis from plotArea. Also checks dateAx as category fallback. */
 function parseAxes(
   plotArea: SafeXmlNode,
   ctx: RenderContext,
+  chartTypeNode?: SafeXmlNode,
 ): { valueAxis: AxisInfo; categoryAxis: AxisInfo } {
-  const valAx = plotArea.child('valAx');
-  const catAx = plotArea.child('catAx');
-  const dateAx = plotArea.child('dateAx');
+  const axisIds = getChartAxisIds(chartTypeNode);
+  const categoryAxisId = axisIds[0];
+  const valueAxisId = axisIds[1];
+  const valAx = findAxisById(plotArea, ['valAx'], valueAxisId);
+  const catAx = findAxisById(plotArea, ['catAx', 'dateAx'], categoryAxisId);
   return {
     valueAxis: parseAxisNode(valAx, ctx),
-    categoryAxis: catAx.exists() ? parseAxisNode(catAx, ctx) : parseAxisNode(dateAx, ctx),
+    categoryAxis: parseAxisNode(catAx, ctx),
   };
 }
 
@@ -1361,6 +1476,41 @@ function mapBarLabelPosition(pos: string | undefined, isStacked: boolean): strin
   }
 }
 
+function mapLineLabelPosition(pos: string | undefined): string {
+  switch (pos) {
+    case 'l':
+      return 'left';
+    case 'r':
+      return 'right';
+    case 'b':
+      return 'bottom';
+    case 'ctr':
+      return 'top';
+    case 't':
+    case 'bestFit':
+    default:
+      return 'top';
+  }
+}
+
+function dataLabelBoxProps(
+  cfg: DataLabelConfig | Partial<DataLabelConfig>,
+): Record<string, unknown> {
+  return {
+    ...(cfg.backgroundColor ? { backgroundColor: cfg.backgroundColor } : {}),
+    ...(cfg.borderColor ? { borderColor: cfg.borderColor } : {}),
+    ...(cfg.borderWidth !== undefined ? { borderWidth: cfg.borderWidth } : {}),
+    ...(cfg.padding ? { padding: cfg.padding } : {}),
+  };
+}
+
+function tooltipExtraCss(textStyle: ChartTextStyle | undefined): string | undefined {
+  const fontSize = textStyle?.fontSize;
+  if (fontSize === undefined) return undefined;
+  const lineHeight = Math.max(fontSize + 5, Math.round(fontSize * 1.45));
+  return `font-size: ${fontSize}px; line-height: ${lineHeight}px;`;
+}
+
 function buildBarChartOption(
   chartTypeNode: SafeXmlNode,
   chartNode: SafeXmlNode,
@@ -1408,25 +1558,27 @@ function buildBarChartOption(
 
     const buildLabel = (
       cfg: DataLabelConfig | Partial<DataLabelConfig> | undefined,
-    ): echarts.BarSeriesOption['label'] =>
-      cfg?.showVal
-        ? {
-            show: true,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            position: mapBarLabelPosition(cfg.position, isStacked) as any,
-            fontSize: cfg.fontSize ?? 9,
-            ...(cfg.color ? { color: cfg.color } : {}),
-            ...(cfg.bold === true ? { fontWeight: 'bold' } : {}),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter: (params: any) => {
-              const rawVal = params?.value;
-              const val =
-                rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
-              if (val === 0 || val === null) return '';
-              return formatValue(val, fc);
-            },
-          }
-        : undefined;
+    ): echarts.BarSeriesOption['label'] => {
+      if (!cfg?.showVal) return undefined;
+      const label = {
+        show: true,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        position: mapBarLabelPosition(cfg.position, isStacked) as any,
+        fontSize: cfg.fontSize ?? 9,
+        ...(cfg.color ? { color: cfg.color } : {}),
+        ...(cfg.bold === true ? { fontWeight: 'bold' as const } : {}),
+        ...dataLabelBoxProps(cfg),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          const rawVal = params?.value;
+          const val =
+            rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
+          if (val === 0 || val === null) return '';
+          return formatValue(val, fc);
+        },
+      };
+      return cfg.fontSize !== undefined ? markExplicitFontSize(label) : label;
+    };
 
     // Per-series label config (override shared)
     const label: echarts.BarSeriesOption['label'] = buildLabel(perSeriesLabels);
@@ -1444,6 +1596,10 @@ function buildBarChartOption(
         color: perSeriesLabels?.color,
         fontSize: perSeriesLabels?.fontSize,
         bold: perSeriesLabels?.bold,
+        backgroundColor: perSeriesLabels?.backgroundColor,
+        borderColor: perSeriesLabels?.borderColor,
+        borderWidth: perSeriesLabels?.borderWidth,
+        padding: perSeriesLabels?.padding,
         ...ov,
       };
       return {
@@ -1460,6 +1616,13 @@ function buildBarChartOption(
       stack: isStacked ? 'total' : undefined,
       itemStyle: s.colorHex ? { color: s.colorHex } : undefined,
       label,
+      ...(s.formatCode
+        ? {
+            tooltip: {
+              valueFormatter: (value: unknown) => formatValue(value as number, s.formatCode),
+            },
+          }
+        : {}),
       barGap: overlap !== undefined ? `${-overlap}%` : undefined,
       // OOXML gapWidth = gap-between-groups / single-bar-width × 100.
       // For N clustered bars: categoryBand = N × barWidth + gap, gap = gapWidth/100 × barWidth.
@@ -1473,7 +1636,7 @@ function buildBarChartOption(
   });
 
   const plotArea = chartNode.child('plotArea');
-  const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx);
+  const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
   const categoryAxisDef: Record<string, unknown> = {
     type: 'category',
@@ -1519,6 +1682,8 @@ function buildBarChartOption(
       : undefined,
     tooltip: {
       trigger: 'axis' as const,
+      textStyle: legendTextStyle,
+      extraCssText: tooltipExtraCss(legendTextStyle),
       ...(tooltipFmt
         ? {
             valueFormatter: (value: unknown) =>
@@ -1564,14 +1729,55 @@ function buildLineChartOption(
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
+  let sharedLabels = parseDataLabels(chartTypeNode, ctx);
+  if (!sharedLabels) {
+    const firstSer = chartTypeNode.children('ser')[0];
+    if (firstSer?.exists()) sharedLabels = parseDataLabels(firstSer, ctx);
+  }
+  const serNodesByOrder = chartTypeNode
+    .children('ser')
+    .map((ser, i) => ({ ser, order: ser.child('order').numAttr('val') ?? i }))
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.ser);
 
-  const series: echarts.LineSeriesOption[] = seriesArr.map((s) => {
+  const series: echarts.LineSeriesOption[] = seriesArr.map((s, idx) => {
     const echartsSymbol = mapOoxmlSymbol(s.markerSymbol);
     const showSymbol = echartsSymbol !== undefined ? echartsSymbol !== 'none' : undefined;
     const lineWidth = s.lineWidth ?? 3;
     const lineStyle = s.colorHex
       ? { color: s.colorHex, width: lineWidth, cap: 'round' as const, join: 'round' as const }
       : { width: lineWidth, cap: 'round' as const, join: 'round' as const };
+    const fc = s.formatCode;
+    const perSeriesLabels =
+      parseDataLabels(serNodesByOrder[idx] ?? chartTypeNode, ctx) ?? sharedLabels;
+    let label: echarts.LineSeriesOption['label'];
+    if (perSeriesLabels?.showVal) {
+      label = {
+        show: true,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        position: mapLineLabelPosition(perSeriesLabels.position) as any,
+        fontSize: perSeriesLabels.fontSize ?? 9,
+        ...(perSeriesLabels.color ? { color: perSeriesLabels.color } : {}),
+        ...(perSeriesLabels.bold === true ? { fontWeight: 'bold' as const } : {}),
+        ...dataLabelBoxProps(perSeriesLabels),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          const rawVal = params?.value;
+          const val =
+            rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
+          return formatValue(val, fc);
+        },
+      };
+      if (perSeriesLabels.fontSize !== undefined) markExplicitFontSize(label);
+    }
+    const forceSymbolForLabel = Boolean(label?.show && echartsSymbol === 'none');
+    const symbol = forceSymbolForLabel
+      ? 'circle'
+      : echartsSymbol && echartsSymbol !== 'none'
+        ? echartsSymbol
+        : undefined;
+    const symbolSize = forceSymbolForLabel ? 0 : s.markerSize;
+    const resolvedShowSymbol = forceSymbolForLabel ? true : showSymbol;
     return {
       type: 'line' as const,
       name: s.name,
@@ -1579,15 +1785,24 @@ function buildLineChartOption(
       areaStyle: isArea ? (s.colorHex ? { color: s.colorHex } : {}) : undefined,
       itemStyle: s.colorHex ? { color: s.colorHex } : undefined,
       lineStyle,
-      ...(echartsSymbol && echartsSymbol !== 'none' ? { symbol: echartsSymbol } : {}),
-      ...(s.markerSize ? { symbolSize: s.markerSize } : {}),
-      ...(showSymbol !== undefined ? { showSymbol } : {}),
+      label,
+      ...(s.formatCode
+        ? {
+            tooltip: {
+              valueFormatter: (value: unknown) => formatValue(value as number, s.formatCode),
+            },
+          }
+        : {}),
+      endLabel: { show: false },
+      ...(symbol ? { symbol } : {}),
+      ...(symbolSize !== undefined ? { symbolSize } : {}),
+      ...(resolvedShowSymbol !== undefined ? { showSymbol: resolvedShowSymbol } : {}),
       z: 3,
     };
   });
 
   const plotArea = chartNode.child('plotArea');
-  const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx);
+  const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
   const pctFormat =
     valueAxis.numFmt || seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
@@ -1628,6 +1843,8 @@ function buildLineChartOption(
       : undefined,
     tooltip: {
       trigger: 'axis' as const,
+      textStyle: legendTextStyle,
+      extraCssText: tooltipExtraCss(legendTextStyle),
       ...(tooltipFmt
         ? {
             valueFormatter: (value: unknown) =>
@@ -1862,6 +2079,8 @@ function buildRadarChartOption(
 
   // Read radar style to determine default marker behavior
   const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
+  const radarHasTopLegend = legendIsAtTop(legendInfo) && !legendInfo?.overlay;
+  const radarCenter: [string, string] = radarHasTopLegend ? ['50%', '66%'] : ['50%', '55%'];
 
   const radarData = seriesArr.map((s) => {
     // Reorder values to match the reversed category order
@@ -1872,6 +2091,9 @@ function buildRadarChartOption(
       radarStyle === 'marker' || (echartsSymbol !== undefined && echartsSymbol !== 'none');
     // PowerPoint radar charts fill the area with a semi-transparent version of the line color
     const isFilled = radarStyle === 'filled';
+    const areaStyle = isFilled
+      ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 0.5 }
+      : undefined;
     return {
       name: s.name,
       value: cwValues,
@@ -1888,9 +2110,7 @@ function buildRadarChartOption(
         : {
             lineStyle: { width: s.lineWidth ?? 3, cap: 'round' as const, join: 'round' as const },
           }),
-      areaStyle: isFilled
-        ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 0.5 }
-        : { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 0.15 },
+      ...(areaStyle ? { areaStyle } : {}),
       ...(echartsSymbol && echartsSymbol !== 'none' ? { symbol: echartsSymbol } : {}),
       ...(s.markerSize ? { symbolSize: s.markerSize } : {}),
       ...(showSymbol ? { symbolSize: s.markerSize ?? 6 } : {}),
@@ -1913,12 +2133,16 @@ function buildRadarChartOption(
       legendInfo,
       legendTopPx,
       seriesArr.map((s) => {
-        const icon = mapOoxmlSymbol(s.markerSymbol);
-        return icon && icon !== 'none' ? { name: s.name, icon } : s.name;
+        const marker = mapOoxmlSymbol(s.markerSymbol);
+        return {
+          name: s.name,
+          icon: lineLegendIconPath(),
+          ...(marker && marker !== 'none' ? { marker } : {}),
+        };
       }),
       legendTextStyle,
     ),
-    radar: { indicator, radius: '58%', center: ['50%', '55%'] },
+    radar: { indicator, radius: '58%', center: radarCenter },
     series: [
       {
         type: 'radar' as const,
@@ -2615,7 +2839,7 @@ function applyDefaultFontSizes(option: echarts.EChartsOption, defaultFs: number)
   // Series data label font sizes: apply default when no explicit OOXML font was set
   const seriesArr = Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : [];
   for (const s of seriesArr) {
-    if (s?.label?.fontSize && (s.label.fontSize as number) <= 10) {
+    if (s?.label?.fontSize && (s.label.fontSize as number) <= 10 && !hasExplicitFontSize(s.label)) {
       s.label.fontSize = defaultFs;
     }
   }
@@ -2634,7 +2858,7 @@ function applyDefaultFontSizes(option: echarts.EChartsOption, defaultFs: number)
 
   if (opt.legend?.textStyle) {
     const current = opt.legend.textStyle.fontSize;
-    if (current === undefined || current <= 10) {
+    if ((current === undefined || current <= 10) && !hasExplicitFontSize(opt.legend.textStyle)) {
       opt.legend.textStyle.fontSize = defaultFs;
     }
   }
@@ -2746,8 +2970,14 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
   const seriesArr = Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : [];
 
   // Group series by stack key to compute stacked totals
-  const stackGroups = new Map<string, number[][]>();
+  const stackGroups = new Map<string, { axisIndex: number; values: number[][] }>();
   const unstackedValues: number[] = [];
+  const valuesByYAxis = new Map<number, number[]>();
+
+  const appendYAxisValues = (axisIndex: number, values: number[]) => {
+    if (!valuesByYAxis.has(axisIndex)) valuesByYAxis.set(axisIndex, []);
+    valuesByYAxis.get(axisIndex)!.push(...values);
+  };
 
   for (const s of seriesArr) {
     if (!s.data) continue;
@@ -2769,25 +2999,31 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
         vals.push(0);
       }
     }
+    const yAxisIndex =
+      typeof s.yAxisIndex === 'number' && Number.isFinite(s.yAxisIndex) ? s.yAxisIndex : 0;
     if (s.stack) {
-      const key = String(s.stack);
-      if (!stackGroups.has(key)) stackGroups.set(key, []);
-      stackGroups.get(key)!.push(vals);
+      const key = `${yAxisIndex}:${String(s.stack)}`;
+      if (!stackGroups.has(key)) stackGroups.set(key, { axisIndex: yAxisIndex, values: [] });
+      stackGroups.get(key)!.values.push(vals);
     } else {
       unstackedValues.push(...vals);
+      appendYAxisValues(yAxisIndex, vals);
     }
   }
 
   // For stacked series, compute per-category sums
   for (const group of stackGroups.values()) {
-    const maxLen = Math.max(...group.map((v) => v.length));
+    const sums: number[] = [];
+    const maxLen = Math.max(...group.values.map((v) => v.length));
     for (let i = 0; i < maxLen; i++) {
       let sum = 0;
-      for (const vals of group) {
+      for (const vals of group.values) {
         sum += vals[i] ?? 0;
       }
+      sums.push(sum);
       allValues.push(sum);
     }
+    appendYAxisValues(group.axisIndex, sums);
   }
   allValues.push(...unstackedValues);
 
@@ -2829,16 +3065,18 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
   }
 
   // Find the value axes (could be xAxis or yAxis depending on bar direction)
-  const processAxis = (axis: unknown) => {
+  const processAxis = (axis: unknown, valueByIndex?: Map<number, number[]>) => {
     if (!axis) return;
     const axes = Array.isArray(axis) ? axis : [axis];
-    for (const ax of axes) {
-      if (!ax || ax.type !== 'value') continue;
+    axes.forEach((ax, index) => {
+      if (!ax || ax.type !== 'value') return;
       // Skip if explicit min/max already set
-      if (ax.min !== undefined && ax.max !== undefined) continue;
+      if (ax.min !== undefined && ax.max !== undefined) return;
 
-      const dataMin = Math.min(...allValues);
-      const dataMax = Math.max(...allValues);
+      const axisValues = valueByIndex?.get(index) ?? allValues;
+      if (axisValues.length === 0) return;
+      const dataMin = Math.min(...axisValues);
+      const dataMax = Math.max(...axisValues);
 
       // Only set max when not already specified
       if (ax.max === undefined) {
@@ -2848,11 +3086,11 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
       if (ax.min === undefined && dataMin >= 0) {
         ax.min = 0;
       }
-    }
+    });
   };
 
   processAxis(opt.xAxis);
-  processAxis(opt.yAxis);
+  processAxis(opt.yAxis, valuesByYAxis);
 }
 
 /**
@@ -2909,6 +3147,7 @@ function createLegendIcon(
   width: number,
   height: number,
   strokeWidth = 2,
+  marker?: string,
 ): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -2926,6 +3165,43 @@ function createLegendIcon(
     path.setAttribute('stroke-width', String(strokeWidth));
     path.setAttribute('stroke-linecap', 'round');
     svg.appendChild(path);
+    if (marker && marker !== 'none') {
+      const cx = width / 2;
+      const cy = height / 2;
+      const markerSize = Math.max(3, Math.min(width, height) * 0.55);
+      if (marker === 'diamond') {
+        const markerPath = document.createElementNS(ns, 'path');
+        markerPath.setAttribute(
+          'd',
+          `M${cx} ${cy - markerSize / 2} L${cx + markerSize / 2} ${cy} L${cx} ${cy + markerSize / 2} L${cx - markerSize / 2} ${cy} Z`,
+        );
+        markerPath.setAttribute('fill', color);
+        svg.appendChild(markerPath);
+      } else if (marker === 'rect') {
+        const rect = document.createElementNS(ns, 'rect');
+        rect.setAttribute('x', String(cx - markerSize / 2));
+        rect.setAttribute('y', String(cy - markerSize / 2));
+        rect.setAttribute('width', String(markerSize));
+        rect.setAttribute('height', String(markerSize));
+        rect.setAttribute('fill', color);
+        svg.appendChild(rect);
+      } else if (marker === 'triangle') {
+        const markerPath = document.createElementNS(ns, 'path');
+        markerPath.setAttribute(
+          'd',
+          `M${cx} ${cy - markerSize / 2} L${cx + markerSize / 2} ${cy + markerSize / 2} L${cx - markerSize / 2} ${cy + markerSize / 2} Z`,
+        );
+        markerPath.setAttribute('fill', color);
+        svg.appendChild(markerPath);
+      } else {
+        const circle = document.createElementNS(ns, 'circle');
+        circle.setAttribute('cx', String(cx));
+        circle.setAttribute('cy', String(cy));
+        circle.setAttribute('r', String(markerSize / 2));
+        circle.setAttribute('fill', color);
+        svg.appendChild(circle);
+      }
+    }
     return svg;
   }
 
@@ -2975,8 +3251,17 @@ function buildCustomLegendOverlay(
   size: { w: number; h: number },
 ): HTMLElement | null {
   const legend = getLegendOptionObject(option.legend);
-  if (!legend || legend.show === false || legend.orient !== 'vertical') return null;
-  if (legend.left === undefined && legend.right === undefined) return null;
+  if (!legend || legend.show === false) return null;
+
+  const isVertical = legend.orient === 'vertical';
+  const isHorizontal = legend.orient === 'horizontal' || legend.orient === undefined;
+  const hasHorizontalAnchor =
+    legend.top !== undefined ||
+    legend.bottom !== undefined ||
+    legend.left !== undefined ||
+    legend.right !== undefined;
+  if (isVertical && legend.left === undefined && legend.right === undefined) return null;
+  if (isHorizontal && !hasHorizontalAnchor) return null;
 
   const palette = Array.isArray(option.color)
     ? option.color.filter((entry): entry is string => typeof entry === 'string')
@@ -2986,29 +3271,38 @@ function buildCustomLegendOverlay(
   type LegendOverlayEntry = {
     name: string;
     icon: string | undefined;
+    marker: string | undefined;
     color: string;
     lineWidth: number;
   };
+  const seriesList = Array.isArray(option.series)
+    ? option.series
+    : option.series
+      ? [option.series]
+      : [];
+  const radarSeries =
+    seriesList.length === 1 &&
+    (seriesList[0] as Record<string, unknown> | undefined)?.type === 'radar'
+      ? (seriesList[0] as Record<string, unknown>)
+      : undefined;
+  const radarData = Array.isArray(radarSeries?.data)
+    ? (radarSeries.data as Record<string, unknown>[])
+    : undefined;
   const entries = rawData
     .map((item, index) => {
       const name = typeof item === 'string' ? item : item.name;
       const itemIcon = typeof item === 'string' ? undefined : item.icon;
+      const itemMarker = typeof item === 'string' ? undefined : item.marker;
       if (!name) return null;
-      const series = (
-        Array.isArray(option.series) ? option.series : option.series ? [option.series] : []
-      )[index] as Record<string, unknown> | undefined;
-      const lineStyle = (series?.lineStyle as Record<string, unknown> | undefined) ?? {};
-      const itemStyle = (series?.itemStyle as Record<string, unknown> | undefined) ?? {};
-      const color =
-        (typeof lineStyle.color === 'string' ? lineStyle.color : undefined) ??
-        (typeof itemStyle.color === 'string' ? itemStyle.color : undefined) ??
-        palette[index] ??
-        '#2f6f8f';
+      const series = seriesList[index] as Record<string, unknown> | undefined;
+      const visual = radarData?.[index] ?? series;
+      const lineStyle = (visual?.lineStyle as Record<string, unknown> | undefined) ?? {};
+      const color = pickVisualStringColor(visual, palette[index] ?? '#2f6f8f');
       const lineWidth =
         typeof lineStyle.width === 'number' && Number.isFinite(lineStyle.width)
           ? Math.max(1, lineStyle.width)
           : 2;
-      return { name, icon: itemIcon ?? legend.icon, color, lineWidth };
+      return { name, icon: itemIcon ?? legend.icon, marker: itemMarker, color, lineWidth };
     })
     .filter((entry): entry is LegendOverlayEntry => entry !== null);
   if (entries.length === 0) return null;
@@ -3017,22 +3311,40 @@ function buildCustomLegendOverlay(
   overlay.className = 'pptx-chart-custom-legend';
   overlay.style.position = 'absolute';
   overlay.style.display = 'flex';
-  overlay.style.flexDirection = 'column';
-  overlay.style.gap = '6px';
+  overlay.style.flexDirection = isVertical ? 'column' : 'row';
+  overlay.style.gap = isVertical ? '6px' : '12px';
   overlay.style.pointerEvents = 'none';
   overlay.style.zIndex = '1';
   overlay.style.whiteSpace = 'nowrap';
   if (legend.left !== undefined) overlay.style.left = resolveInsetToPx(legend.left, size.w);
   if (legend.right !== undefined) overlay.style.right = resolveInsetToPx(legend.right, size.w);
+  if (legend.width !== undefined) overlay.style.width = resolveInsetToPx(legend.width, size.w);
+  if (legend.height !== undefined) overlay.style.height = resolveInsetToPx(legend.height, size.h);
+  if (legend.width !== undefined || legend.height !== undefined) {
+    overlay.style.boxSizing = 'border-box';
+    if (isHorizontal) {
+      overlay.style.alignItems = 'center';
+      if (legend.width !== undefined) overlay.style.justifyContent = 'center';
+    } else {
+      if (legend.width !== undefined) overlay.style.alignItems = 'center';
+      if (legend.height !== undefined) overlay.style.justifyContent = 'center';
+    }
+  }
   const sideLegend =
     legend.orient === 'vertical' && (legend.left !== undefined || legend.right !== undefined);
   if (sideLegend) {
-    overlay.style.top = `${size.h / 2}px`;
-    overlay.style.transform = 'translateY(-50%)';
+    if (legend.top === undefined && legend.bottom === undefined) {
+      overlay.style.top = `${size.h / 2}px`;
+      overlay.style.transform = 'translateY(-50%)';
+    }
   } else if (legend.top !== undefined) {
     overlay.style.top = resolveInsetToPx(legend.top, size.h);
   }
   if (legend.bottom !== undefined) overlay.style.bottom = resolveInsetToPx(legend.bottom, size.h);
+  if (isHorizontal && legend.left === undefined && legend.right === undefined) {
+    overlay.style.left = '50%';
+    overlay.style.transform = 'translateX(-50%)';
+  }
 
   const fontSize = legend.textStyle?.fontSize ?? 10;
   const itemWidth = legend.itemWidth ?? fontSize;
@@ -3045,7 +3357,14 @@ function buildCustomLegendOverlay(
     row.style.gap = '6px';
 
     row.appendChild(
-      createLegendIcon(entry.icon, entry.color, itemWidth, itemHeight, entry.lineWidth),
+      createLegendIcon(
+        entry.icon,
+        entry.color,
+        itemWidth,
+        itemHeight,
+        entry.lineWidth,
+        entry.marker,
+      ),
     );
 
     const label = document.createElement('span');
@@ -3172,12 +3491,51 @@ function mergeLegendData(
   return merged;
 }
 
+function normalizeOptionArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function getValueAxisId(chartTypeNode: SafeXmlNode): string | undefined {
+  return getChartAxisIds(chartTypeNode)[1];
+}
+
 function mergeCartesianComboOptions(
   primary: echarts.EChartsOption,
   secondary: echarts.EChartsOption,
+  primaryChartTypeNode: SafeXmlNode,
+  secondaryChartTypeNode: SafeXmlNode,
 ): echarts.EChartsOption {
   const primarySeries = Array.isArray(primary.series) ? primary.series : [];
   const secondarySeries = Array.isArray(secondary.series) ? secondary.series : [];
+  const primaryValueAxisId = getValueAxisId(primaryChartTypeNode);
+  const secondaryValueAxisId = getValueAxisId(secondaryChartTypeNode);
+  const usesDistinctValueAxis =
+    primaryValueAxisId !== undefined &&
+    secondaryValueAxisId !== undefined &&
+    primaryValueAxisId !== secondaryValueAxisId;
+
+  if (usesDistinctValueAxis) {
+    const primaryYAxes = normalizeOptionArray(primary.yAxis);
+    const secondaryYAxes = normalizeOptionArray(secondary.yAxis);
+    const secondaryYAxisIndex = primaryYAxes.length;
+    return {
+      ...primary,
+      legend: mergeLegendData(primary.legend, secondary.legend),
+      yAxis: [...primaryYAxes, ...secondaryYAxes],
+      series: [
+        ...primarySeries,
+        ...secondarySeries.map((series) => ({
+          ...series,
+          yAxisIndex:
+            (series as { yAxisIndex?: number }).yAxisIndex !== undefined
+              ? (series as { yAxisIndex?: number }).yAxisIndex
+              : secondaryYAxisIndex,
+        })),
+      ],
+    };
+  }
+
   return {
     ...primary,
     legend: mergeLegendData(primary.legend, secondary.legend),
@@ -3237,7 +3595,12 @@ export function parseChartXml(chartXml: SafeXmlNode, ctx: RenderContext): ParseC
           chartCtx,
         );
         if (!comboOption) continue;
-        option = mergeCartesianComboOptions(option, comboOption);
+        option = mergeCartesianComboOptions(
+          option,
+          comboOption,
+          entry.chartTypeNode,
+          comboEntry.chartTypeNode,
+        );
       }
     }
 
@@ -3340,7 +3703,9 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   wrapper.appendChild(chartDiv);
 
   // Parse chart data and create ECharts option
-  const { option, dataTable } = parseChartXml(chartXml, ctx);
+  const chartTheme = ctx.presentation.chartThemes?.get(node.chartPath);
+  const chartCtx = chartTheme ? { ...ctx, theme: chartTheme, colorCache: new Map() } : ctx;
+  const { option, dataTable } = parseChartXml(chartXml, chartCtx);
   const customLegend = buildCustomLegendOverlay(option, node.size);
   const legendOption = getLegendOptionObject(option.legend);
   if (customLegend && legendOption) {

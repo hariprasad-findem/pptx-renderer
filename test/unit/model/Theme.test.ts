@@ -7,6 +7,7 @@ function makeThemeXml(opts: {
   majorFont?: { latin?: string; ea?: string; cs?: string };
   minorFont?: { latin?: string; ea?: string; cs?: string };
   fillStyles?: number;
+  bgFillStyles?: number;
   lineStyles?: number;
 } = {}) {
   const colors = opts.colors ?? {
@@ -33,8 +34,10 @@ function makeThemeXml(opts: {
   const nf = opts.minorFont ?? { latin: 'Calibri', ea: '', cs: '' };
 
   const fillCount = opts.fillStyles ?? 1;
+  const bgFillCount = opts.bgFillStyles ?? 1;
   const lineCount = opts.lineStyles ?? 1;
   const fills = Array.from({ length: fillCount }, () => '<solidFill><srgbClr val="FFFFFF"/></solidFill>').join('');
+  const bgFills = Array.from({ length: bgFillCount }, () => '<solidFill><srgbClr val="EEEEEE"/></solidFill>').join('');
   const lines = Array.from({ length: lineCount }, () => '<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill></ln>').join('');
 
   return parseXml(`
@@ -57,6 +60,7 @@ function makeThemeXml(opts: {
           <fillStyleLst>${fills}</fillStyleLst>
           <lnStyleLst>${lines}</lnStyleLst>
           <effectStyleLst/>
+          <bgFillStyleLst>${bgFills}</bgFillStyleLst>
         </fmtScheme>
       </themeElements>
     </theme>
@@ -108,6 +112,12 @@ describe('parseTheme', () => {
     const theme = parseTheme(makeThemeXml({ fillStyles: 3 }));
     expect(theme.fillStyles).toHaveLength(3);
     expect(theme.fillStyles[0].exists()).toBe(true);
+  });
+
+  it('parses background fill styles', () => {
+    const theme = parseTheme(makeThemeXml({ bgFillStyles: 2 }));
+    expect(theme.bgFillStyles).toHaveLength(2);
+    expect(theme.bgFillStyles![0].exists()).toBe(true);
   });
 
   it('parses line styles', () => {

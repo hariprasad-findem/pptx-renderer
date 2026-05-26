@@ -5,20 +5,24 @@ import { xmlNode } from '../helpers/xmlNode';
 import { parseXml } from '../../../src/parser/XmlParser';
 import type { TextBody, TextParagraph, TextRun } from '../../../src/model/nodes/ShapeNode';
 
-function makeTextBody(opts: {
-  paragraphs?: TextParagraph[];
-  bodyPr?: string;
-  listStyle?: string;
-  layoutBodyPr?: string;
-} = {}): TextBody {
+function makeTextBody(
+  opts: {
+    paragraphs?: TextParagraph[];
+    bodyPr?: string;
+    listStyle?: string;
+    layoutBodyPr?: string;
+  } = {},
+): TextBody {
   return {
     bodyProperties: opts.bodyPr ? xmlNode(opts.bodyPr) : undefined,
     layoutBodyProperties: opts.layoutBodyPr ? xmlNode(opts.layoutBodyPr) : undefined,
     listStyle: opts.listStyle ? xmlNode(opts.listStyle) : undefined,
-    paragraphs: opts.paragraphs ?? [{
-      runs: [{ text: 'Hello World' }],
-      level: 0,
-    }],
+    paragraphs: opts.paragraphs ?? [
+      {
+        runs: [{ text: 'Hello World' }],
+        level: 0,
+      },
+    ],
   };
 }
 
@@ -51,9 +55,7 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('renders empty paragraph as line break', () => {
       const body = makeTextBody({
-        paragraphs: [
-          { runs: [], level: 0 },
-        ],
+        paragraphs: [{ runs: [], level: 0 }],
       });
       const container = renderToContainer(body);
       // Empty paragraphs should still produce a div
@@ -62,13 +64,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('renders multiple runs in a paragraph', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'Hello ' },
-            { text: 'World' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Hello ' }, { text: 'World' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('Hello World');
@@ -78,13 +79,17 @@ describe('TextRenderer — renderTextBody', () => {
   describe('run properties', () => {
     it('applies bold from rPr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Bold',
-            properties: xmlNode('<rPr b="1"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Bold',
+                properties: xmlNode('<rPr b="1"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -94,13 +99,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies italic from rPr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Italic',
-            properties: xmlNode('<rPr i="1"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Italic',
+                properties: xmlNode('<rPr i="1"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -109,13 +118,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies underline from rPr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Underline',
-            properties: xmlNode('<rPr u="sng"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Underline',
+                properties: xmlNode('<rPr u="sng"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -124,13 +137,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies strikethrough from rPr', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Strike',
-            properties: xmlNode('<rPr strike="sngStrike"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Strike',
+                properties: xmlNode('<rPr strike="sngStrike"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -139,28 +156,66 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies font size from rPr sz', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Big',
-            properties: xmlNode('<rPr sz="2400"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Big',
+                properties: xmlNode('<rPr sz="2400"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
       expect(span!.style.fontSize).toBe('24pt');
     });
 
+    it('preserves inherited defRPr font size when paragraph defRPr is empty (ai-computing slide 28)', () => {
+      const ctx = createMockRenderContext();
+      ctx.master.textStyles.otherStyle = parseXml(`
+        <p:otherStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr>
+        </p:otherStyle>
+      `);
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><defRPr/></pPr>'),
+            runs: [
+              {
+                text: '为追求极致性能与灵活控制的AI团队，提供高度自主、稳定可靠的专业训练基础设施',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="3F58CA"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+
+      const span = container.querySelector('span');
+      expect(span!.style.fontSize).toBe('24pt');
+    });
+
     it('applies text color from rPr solidFill', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Red',
-            properties: xmlNode('<rPr><solidFill><srgbClr val="FF0000"/></solidFill></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Red',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="FF0000"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -169,13 +224,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies letter spacing from rPr spc', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Spaced',
-            properties: xmlNode('<rPr spc="200"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Spaced',
+                properties: xmlNode('<rPr spc="200"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -185,13 +244,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies ALL CAPS from rPr cap="all"', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'caps',
-            properties: xmlNode('<rPr cap="all"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'caps',
+                properties: xmlNode('<rPr cap="all"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -200,13 +263,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies superscript from baseline > 0', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'sup',
-            properties: xmlNode('<rPr baseline="30000"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'sup',
+                properties: xmlNode('<rPr baseline="30000"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -216,13 +283,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies subscript from baseline < 0', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'sub',
-            properties: xmlNode('<rPr baseline="-25000"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'sub',
+                properties: xmlNode('<rPr baseline="-25000"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -232,27 +303,33 @@ describe('TextRenderer — renderTextBody', () => {
   });
 
   describe('paragraph properties', () => {
-    it('applies margin-left from marL', () => {
+    it('applies internal padding from marL', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr marL="457200"/>'),
-          runs: [{ text: 'Indented' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr marL="457200"/>'),
+            runs: [{ text: 'Indented' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
       // 457200 EMU ≈ 48px
-      expect(parseFloat(para.style.marginLeft)).toBeGreaterThan(0);
+      expect(parseFloat(para.style.paddingLeft)).toBeGreaterThan(0);
+      expect(para.style.marginLeft).toBe('');
+      expect(para.style.boxSizing).toBe('border-box');
     });
 
     it('applies text-indent from indent', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr indent="-228600"/>'),
-          runs: [{ text: 'Hanging' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr indent="-228600"/>'),
+            runs: [{ text: 'Hanging' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -263,11 +340,13 @@ describe('TextRenderer — renderTextBody', () => {
   describe('bullets', () => {
     it('renders character bullet from buChar', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><buChar char="•"/></pPr>'),
-          runs: [{ text: 'Bullet item' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buChar char="•"/></pPr>'),
+            runs: [{ text: 'Bullet item' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('•');
@@ -285,10 +364,12 @@ describe('TextRenderer — renderTextBody', () => {
             </lvl1pPr>
           </lstStyle>
         `,
-        paragraphs: [{
-          runs: [{ text: 'Body placeholder item' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Body placeholder item' }],
+            level: 0,
+          },
+        ],
       });
 
       const container = renderToContainer(body);
@@ -300,13 +381,159 @@ describe('TextRenderer — renderTextBody', () => {
       expect(bulletSpan!.style.fontSize).toBe('32pt');
     });
 
+    it('applies percentage bullet size from buSzPct', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(`
+            <pPr>
+              <buChar char="•"/>
+              <buSzPct val="75000"/>
+              <defRPr sz="4000"/>
+            </pPr>
+          `),
+            runs: [{ text: 'Scaled bullet' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bulletSpan = Array.from(container.querySelectorAll('span')).find((span) =>
+        span.textContent?.startsWith('•'),
+      ) as HTMLElement | undefined;
+
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.fontSize).toBe('30pt');
+    });
+
+    it('applies absolute bullet size from buSzPts', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(`
+            <pPr>
+              <buChar char="•"/>
+              <buSzPts val="1800"/>
+              <defRPr sz="4000"/>
+            </pPr>
+          `),
+            runs: [{ text: 'Absolute bullet' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bulletSpan = Array.from(container.querySelectorAll('span')).find((span) =>
+        span.textContent?.startsWith('•'),
+      ) as HTMLElement | undefined;
+
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.fontSize).toBe('18pt');
+    });
+
+    it('uses first run preset color for buClrTx bullets (model-platform slide 25)', () => {
+      const body = makeTextBody({
+        listStyle: `
+          <lstStyle xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <lvl1pPr>
+              <defRPr>
+                <solidFill><srgbClr val="000000"/></solidFill>
+              </defRPr>
+            </lvl1pPr>
+          </lstStyle>
+        `,
+        paragraphs: [
+          {
+            properties: xmlNode(`
+            <pPr>
+              <buClrTx/>
+              <buSzTx/>
+              <buFont typeface="Arial"/>
+              <buChar char="•"/>
+              <defRPr/>
+            </pPr>
+          `),
+            runs: [
+              {
+                text: '内置海量模型，涵盖多种能力领域',
+                properties: xmlNode(`
+                <rPr sz="1200">
+                  <solidFill><prstClr val="white"/></solidFill>
+                  <latin typeface="微软雅黑"/>
+                </rPr>
+              `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bulletSpan = Array.from(container.querySelectorAll('span')).find((span) =>
+        span.textContent?.startsWith('•'),
+      ) as HTMLElement | undefined;
+
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.color).toBe('rgb(255, 255, 255)');
+    });
+
+    it('uses first visible run color when buChar omits buClrTx but inherited defRPr is dark (xcloud-plan slide 25)', () => {
+      const body = makeTextBody({
+        listStyle: `
+          <lstStyle xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <lvl1pPr>
+              <defRPr>
+                <solidFill><srgbClr val="000000"/></solidFill>
+              </defRPr>
+            </lvl1pPr>
+          </lstStyle>
+        `,
+        paragraphs: [
+          {
+            properties: xmlNode(`
+              <pPr marL="285750" indent="-285750">
+                <buFont typeface="Arial"/>
+                <buChar char="•"/>
+                <defRPr/>
+              </pPr>
+            `),
+            runs: [
+              {
+                text: 'GenAI Adoption / GenAI 赋能开发 / 会用 AI 工具',
+                properties: xmlNode(`
+                  <rPr sz="1400">
+                    <solidFill><srgbClr val="FFFFFF"/></solidFill>
+                    <latin typeface="Arial"/>
+                  </rPr>
+                `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bulletSpan = Array.from(container.querySelectorAll('span')).find((span) =>
+        span.textContent?.startsWith('•'),
+      ) as HTMLElement | undefined;
+
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.color).toBe('rgb(255, 255, 255)');
+    });
+
     it('suppresses bullet when buNone is present', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><buNone/></pPr>'),
-          runs: [{ text: 'No bullet' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buNone/></pPr>'),
+            runs: [{ text: 'No bullet' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toBe('No bullet');
@@ -317,13 +544,17 @@ describe('TextRenderer — renderTextBody', () => {
     it('applies font scale from normAutofit', () => {
       const body = makeTextBody({
         bodyPr: '<bodyPr><normAutofit fontScale="80000"/></bodyPr>',
-        paragraphs: [{
-          runs: [{
-            text: 'Scaled',
-            properties: xmlNode('<rPr sz="2000"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Scaled',
+                properties: xmlNode('<rPr sz="2000"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -332,14 +563,37 @@ describe('TextRenderer — renderTextBody', () => {
       expect(span!.style.fontSize).toBe('16pt');
     });
 
+    it('applies font scale from inherited layout bodyPr normAutofit', () => {
+      const body = makeTextBody({
+        layoutBodyPr: '<bodyPr><normAutofit fontScale="50000"/></bodyPr>',
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Inherited scale',
+                properties: xmlNode('<rPr sz="2400"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      const span = container.querySelector('span');
+      expect(span).not.toBeNull();
+      expect(span!.style.fontSize).toBe('12pt');
+    });
+
     it('applies lnSpcReduction from normAutofit', () => {
       const body: TextBody = {
         bodyProperties: xmlNode('<bodyPr><normAutofit lnSpcReduction="20000"/></bodyPr>'),
-        paragraphs: [{
-          properties: xmlNode('<pPr><lnSpc><spcPct val="150000"/></lnSpc></pPr>'),
-          runs: [{ text: 'Reduced' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><lnSpc><spcPct val="150000"/></lnSpc></pPr>'),
+            runs: [{ text: 'Reduced' }],
+            level: 0,
+          },
+        ],
       };
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -351,13 +605,19 @@ describe('TextRenderer — renderTextBody', () => {
   describe('hyperlinks', () => {
     it('renders hlinkClick as anchor tag via rels', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Click me',
-            properties: xmlNode('<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><hlinkClick r:id="rId1"/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Click me',
+                properties: xmlNode(
+                  '<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><hlinkClick r:id="rId1"/></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       ctx.slide.rels.set('rId1', {
@@ -377,14 +637,12 @@ describe('TextRenderer — renderTextBody', () => {
   describe('line breaks', () => {
     it('renders \\n text as <br>', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'Line 1' },
-            { text: '\n' },
-            { text: 'Line 2' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Line 1' }, { text: '\n' }, { text: 'Line 2' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const br = container.querySelector('br');
@@ -406,10 +664,12 @@ describe('TextRenderer — renderTextBody', () => {
   describe('cellTextColor override', () => {
     it('uses cellTextColor from table style', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Cell' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Cell' }],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       const container = document.createElement('div');
@@ -424,11 +684,13 @@ describe('TextRenderer — renderTextBody', () => {
   describe('text alignment', () => {
     it('applies center alignment from pPr algn="ctr"', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr algn="ctr"/>'),
-          runs: [{ text: 'Centered' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr algn="ctr"/>'),
+            runs: [{ text: 'Centered' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -437,11 +699,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies right alignment', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr algn="r"/>'),
-          runs: [{ text: 'Right' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr algn="r"/>'),
+            runs: [{ text: 'Right' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -450,11 +714,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies justify alignment', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr algn="just"/>'),
-          runs: [{ text: 'Justified' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr algn="just"/>'),
+            runs: [{ text: 'Justified' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -485,11 +751,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('renders alphaLcPeriod auto-numbering', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><buAutoNum type="alphaLcPeriod"/></pPr>'),
-          runs: [{ text: 'Alpha' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buAutoNum type="alphaLcPeriod"/></pPr>'),
+            runs: [{ text: 'Alpha' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('a.');
@@ -497,11 +765,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('renders romanUcPeriod auto-numbering', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><buAutoNum type="romanUcPeriod"/></pPr>'),
-          runs: [{ text: 'Roman' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buAutoNum type="romanUcPeriod"/></pPr>'),
+            runs: [{ text: 'Roman' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       expect(container.textContent).toContain('I.');
@@ -511,13 +781,17 @@ describe('TextRenderer — renderTextBody', () => {
   describe('font resolution', () => {
     it('resolves +mn-lt to theme minor font', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Themed',
-            properties: xmlNode('<rPr><latin typeface="+mn-lt"/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Themed',
+                properties: xmlNode('<rPr><latin typeface="+mn-lt"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -526,13 +800,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('resolves +mj-lt to theme major font', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Major',
-            properties: xmlNode('<rPr><latin typeface="+mj-lt"/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Major',
+                properties: xmlNode('<rPr><latin typeface="+mj-lt"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -542,13 +820,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('uses explicit font family from latin typeface', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Arial',
-            properties: xmlNode('<rPr><latin typeface="Arial"/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Arial',
+                properties: xmlNode('<rPr><latin typeface="Arial"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -557,10 +839,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('falls back to theme minor font when no font specified', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Fallback' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Fallback' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -571,11 +855,13 @@ describe('TextRenderer — renderTextBody', () => {
   describe('line spacing', () => {
     it('applies spcPct line height', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><lnSpc><spcPct val="120000"/></lnSpc></pPr>'),
-          runs: [{ text: 'Spaced' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><lnSpc><spcPct val="120000"/></lnSpc></pPr>'),
+            runs: [{ text: 'Spaced' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -584,11 +870,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies spcPts line height', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><lnSpc><spcPts val="2400"/></lnSpc></pPr>'),
-          runs: [{ text: 'Fixed' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><lnSpc><spcPts val="2400"/></lnSpc></pPr>'),
+            runs: [{ text: 'Fixed' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -599,11 +887,13 @@ describe('TextRenderer — renderTextBody', () => {
   describe('paragraph spacing', () => {
     it('applies spaceBefore in pt from spcBef spcPts', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><spcBef><spcPts val="1200"/></spcBef></pPr>'),
-          runs: [{ text: 'Before' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><spcBef><spcPts val="1200"/></spcBef></pPr>'),
+            runs: [{ text: 'Before' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -612,11 +902,13 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies spaceAfter in pt from spcAft spcPts', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          properties: xmlNode('<pPr><spcAft><spcPts val="600"/></spcAft></pPr>'),
-          runs: [{ text: 'After' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><spcAft><spcPts val="600"/></spcAft></pPr>'),
+            runs: [{ text: 'After' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
@@ -627,13 +919,17 @@ describe('TextRenderer — renderTextBody', () => {
   describe('text effects', () => {
     it('applies noFill to make text transparent', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Ghost',
-            properties: xmlNode('<rPr><noFill/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Ghost',
+                properties: xmlNode('<rPr><noFill/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -642,13 +938,19 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies text outline with solid fill', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Outlined',
-            properties: xmlNode('<rPr><ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Outlined',
+                properties: xmlNode(
+                  '<rPr><ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span') as any;
@@ -657,13 +959,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies small caps from cap="small"', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'smallcaps',
-            properties: xmlNode('<rPr cap="small"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'smallcaps',
+                properties: xmlNode('<rPr cap="small"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -672,13 +978,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('applies kerning when kern is set', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Kerned',
-            properties: xmlNode('<rPr kern="0" sz="2400"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Kerned',
+                properties: xmlNode('<rPr kern="0" sz="2400"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -687,13 +997,17 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('reduces font size for super/subscript with large shift', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'sup',
-            properties: xmlNode('<rPr baseline="30000" sz="2400"/>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'sup',
+                properties: xmlNode('<rPr baseline="30000" sz="2400"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const span = container.querySelector('span');
@@ -706,10 +1020,12 @@ describe('TextRenderer — renderTextBody', () => {
   describe('fontRefColor override', () => {
     it('uses fontRefColor when no explicit run color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'SmartArt' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'SmartArt' }],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       const container = document.createElement('div');
@@ -723,13 +1039,19 @@ describe('TextRenderer — renderTextBody', () => {
   describe('hyperlink theme color', () => {
     it('applies hlink theme color when run has hlinkClick without explicit color', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{
-            text: 'Link',
-            properties: xmlNode('<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><hlinkClick r:id="rId1"/></rPr>'),
-          }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Link',
+                properties: xmlNode(
+                  '<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><hlinkClick r:id="rId1"/></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       ctx.slide.rels.set('rId1', {
@@ -744,15 +1066,124 @@ describe('TextRenderer — renderTextBody', () => {
       // Should use hlink color from theme (0563C1) - jsdom normalizes to rgb
       expect(link!.style.color).toBe('rgb(5, 99, 193)');
     });
+
+    it('applies hlink theme color and underline when Office emits default tx1 fill', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'LangSmith',
+                properties: xmlNode(
+                  '<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><solidFill><schemeClr val="tx1"/></solidFill><hlinkClick r:id="rId1"/></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+        target: 'https://www.langchain.com/langsmith',
+        targetMode: 'External',
+      });
+      const container = document.createElement('div');
+      renderTextBody(body, undefined, ctx, container);
+      const link = container.querySelector('a');
+      expect(link).not.toBeNull();
+      expect(link!.style.color).toBe('rgb(5, 99, 193)');
+      expect(link!.style.textDecoration).toContain('underline');
+    });
+
+    it('applies hlink theme color when Office materializes surrounding text color on linked runs', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Gartner<',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="212121"/></solidFill></rPr>'),
+              },
+              {
+                text: 'Assessing OpenTelemetry',
+                properties: xmlNode(
+                  '<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><solidFill><srgbClr val="212121"/></solidFill><hlinkClick r:id="rId1"/></rPr>',
+                ),
+              },
+              {
+                text: '>',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="212121"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+            endParaRPr: xmlNode(
+              '<endParaRPr><solidFill><srgbClr val="212121"/></solidFill></endParaRPr>',
+            ),
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+        target: 'https://www.gartner.com/document/4429299',
+        targetMode: 'External',
+      });
+      const container = document.createElement('div');
+      renderTextBody(body, undefined, ctx, container);
+      const link = container.querySelector('a');
+      expect(link).not.toBeNull();
+      expect(link!.style.color).toBe('rgb(5, 99, 193)');
+      expect(link!.style.textDecoration).toContain('underline');
+    });
+
+    it('preserves explicit hyperlink colors that differ from surrounding text', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Source: ',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="212121"/></solidFill></rPr>'),
+              },
+              {
+                text: 'custom link',
+                properties: xmlNode(
+                  '<rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><solidFill><srgbClr val="E1251B"/></solidFill><hlinkClick r:id="rId1"/></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+            endParaRPr: xmlNode(
+              '<endParaRPr><solidFill><srgbClr val="212121"/></solidFill></endParaRPr>',
+            ),
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+        target: 'https://example.com/custom',
+        targetMode: 'External',
+      });
+      const container = document.createElement('div');
+      renderTextBody(body, undefined, ctx, container);
+      const link = container.querySelector('a');
+      expect(link).not.toBeNull();
+      expect(link!.style.color).toBe('rgb(225, 37, 27)');
+    });
   });
 
   describe('layout placeholder lstStyle inheritance (Level 4)', () => {
     it('inherits alignment from layout placeholder lstStyle', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'From layout' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'From layout' }],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
       // Set up a layout placeholder with lstStyle containing alignment
@@ -782,10 +1213,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('layout placeholder lstStyle overrides master placeholder lstStyle', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [{ text: 'Override test' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Override test' }],
+            level: 0,
+          },
+        ],
       });
       const ctx = createMockRenderContext();
 
@@ -848,11 +1281,13 @@ describe('TextRenderer — renderTextBody', () => {
             </lvl1pPr>
           </lstStyle>`,
         ),
-        paragraphs: [{
-          properties: xmlNode('<pPr><buChar char="•"/></pPr>'),
-          runs: [{ text: 'Bullet item' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buChar char="•"/></pPr>'),
+            runs: [{ text: 'Bullet item' }],
+            level: 0,
+          },
+        ],
       };
 
       const ctx = createMockRenderContext();
@@ -885,13 +1320,15 @@ describe('TextRenderer — renderTextBody', () => {
             </lvl1pPr>
           </lstStyle>`,
         ),
-        paragraphs: [{
-          properties: xmlNode(
-            '<pPr><buClr><srgbClr val="00FF00"/></buClr><buChar char="•"/></pPr>',
-          ),
-          runs: [{ text: 'Bullet item' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode(
+              '<pPr><buClr><srgbClr val="00FF00"/></buClr><buChar char="•"/></pPr>',
+            ),
+            runs: [{ text: 'Bullet item' }],
+            level: 0,
+          },
+        ],
       };
 
       const ctx = createMockRenderContext();
@@ -922,11 +1359,13 @@ describe('TextRenderer — renderTextBody', () => {
             </lvl1pPr>
           </lstStyle>`,
         ),
-        paragraphs: [{
-          properties: xmlNode('<pPr><buChar char="-"/></pPr>'),
-          runs: [{ text: 'Item with dash' }],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buChar char="-"/></pPr>'),
+            runs: [{ text: 'Item with dash' }],
+            level: 0,
+          },
+        ],
       };
 
       const ctx = createMockRenderContext();
@@ -979,14 +1418,16 @@ describe('TextRenderer — renderTextBody', () => {
       });
 
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: '示例服务', properties: xmlNode('<rPr lang="zh-CN" sz="6600"/>') },
-            { text: '\n' },
-            { text: '-- AIDC aaS', properties: xmlNode('<rPr lang="en-US" sz="4000"/>') },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [
+              { text: '示例服务', properties: xmlNode('<rPr lang="zh-CN" sz="6600"/>') },
+              { text: '\n' },
+              { text: '-- AIDC aaS', properties: xmlNode('<rPr lang="en-US" sz="4000"/>') },
+            ],
+            level: 0,
+          },
+        ],
       });
       const container = document.createElement('div');
       const placeholder = { type: 'title' };
@@ -1003,14 +1444,13 @@ describe('TextRenderer — renderTextBody', () => {
       // The trailing <br> should produce a line whose height matches 72pt
       const endParaRPr = xmlNode('<endParaRPr lang="en-US" sz="7200"/>');
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'Hello' },
-            { text: '\n' },
-          ],
-          level: 0,
-          endParaRPr,
-        } as any],
+        paragraphs: [
+          {
+            runs: [{ text: 'Hello' }, { text: '\n' }],
+            level: 0,
+            endParaRPr,
+          } as any,
+        ],
       });
       const container = renderToContainer(body);
       // After "Hello" and the <br>, there should be a trailing spacer element
@@ -1026,11 +1466,13 @@ describe('TextRenderer — renderTextBody', () => {
     it('paragraph with only endParaRPr (no visible runs) uses endParaRPr font size for height', () => {
       const endParaRPr = xmlNode('<endParaRPr lang="en-US" sz="5400"/>');
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [],
-          level: 0,
-          endParaRPr,
-        } as any],
+        paragraphs: [
+          {
+            runs: [],
+            level: 0,
+            endParaRPr,
+          } as any,
+        ],
       });
       const container = renderToContainer(body);
       const paraDiv = container.children[0] as HTMLElement;
@@ -1044,12 +1486,12 @@ describe('TextRenderer — renderTextBody', () => {
   describe('consecutive space preservation', () => {
     it('uses non-breaking spaces to preserve consecutive spaces without justify stretching', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: '             Lenovo AI Cloud' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: '             Lenovo AI Cloud' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const spans = container.querySelectorAll('span');
@@ -1069,12 +1511,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('does not alter spans with only single spaces', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'Hello World' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Hello World' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const spans = container.querySelectorAll('span');
@@ -1090,14 +1532,12 @@ describe('TextRenderer — renderTextBody', () => {
   describe('tab character rendering', () => {
     it('preserves tab characters with white-space: pre so browser renders them', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: '示例服务' },
-            { text: '\t\t\t' },
-            { text: '-- AIDC aaS' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: '示例服务' }, { text: '\t\t\t' }, { text: '-- AIDC aaS' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       // Find the span containing tab characters
@@ -1115,14 +1555,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('sets tab-size on paragraph div based on default tab size (914400 EMU = 96px)', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'Before' },
-            { text: '\t' },
-            { text: 'After' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'Before' }, { text: '\t' }, { text: 'After' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       // The paragraph div should have a tab-size set
@@ -1133,14 +1571,12 @@ describe('TextRenderer — renderTextBody', () => {
 
     it('renders tab characters between text with preserved whitespace', () => {
       const body = makeTextBody({
-        paragraphs: [{
-          runs: [
-            { text: 'A' },
-            { text: '\t' },
-            { text: 'B' },
-          ],
-          level: 0,
-        }],
+        paragraphs: [
+          {
+            runs: [{ text: 'A' }, { text: '\t' }, { text: 'B' }],
+            level: 0,
+          },
+        ],
       });
       const container = renderToContainer(body);
       const allText = container.textContent || '';
