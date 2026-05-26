@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-05-26
+
+### Added
+
+- **Recommended ZIP safety limits** — `RECOMMENDED_ZIP_LIMITS` provides documented defaults for rendering untrusted PPTX input.
+- **Expanded python-pptx placeholder oracle coverage** — added a regression case for idx-only placeholder inheritance, covering layout/master text style resolution and bullet sizing.
+- **E2E comparison slide URL state** — the selected slide is now reflected in the `slide` query parameter so manual visual review survives refresh and shared URLs.
+- **Chart lifecycle regression coverage** — standalone `renderSlide()` chart instances are now covered to ensure charts are disposed when the returned slide handle is disposed.
+- **Rendering fidelity unit coverage** — added regression coverage for real-world `ai-computing`, `opentelemetry`, `model-platform`, and `xcloud-plan` rendering issues.
+
+### Changed
+
+- **Resource limits are enforced against decoded entry sizes** when ZIP metadata is unavailable, improving protection against malformed or adversarial PPTX archives.
+- **Render queue cancellation is stricter**: stale batched list renders stop when a newer render request supersedes queued work.
+- **External media handling is safer by default**: unsafe external media relationships are rejected and media preloading is disabled during rendering.
+- **Chart rendering is closer to Office output**: chart-local theme overrides, combo chart series, radar legend layout, default chart typography, axis label sizing, data labels, and interactive label sizing now follow OOXML semantics more closely.
+- **Text layout now honors more Office body properties** including inherited `bodyPr`, autofit modes, hyperlink theme colors, inherited bullet colors, arched text transforms, and narrow CJK vertical-style labels.
+- **Shape and layout rendering defaults were refined** across fills, strokes, groups, tables, images, and backgrounds to reduce browser-default drift from PowerPoint output.
+
+### Fixed
+
+- Fixed resource exhaustion risks from oversized decoded ZIP entries, chart cache point allocation, and EMF bitmap decoding.
+- Fixed stale batched renders mutating the DOM after a newer render cycle had started.
+- Fixed placeholder-only slide shapes losing layout/master text style inheritance, including title/body categories and inherited bullet sizing.
+- Fixed bullet glyphs rendering too small when font size came from inherited `defRPr` plus `normAutofit` scaling.
+- Fixed chart-local theme overrides being ignored in some cases.
+- Fixed combo charts dropping later plot-area series, such as additional line series.
+- Fixed radar chart legend positioning and sizing issues.
+- Fixed chart legend labels, data labels, axis labels, and hover labels using incorrect default sizes.
+- Fixed hyperlink text color inheritance for links without explicit run colors.
+- Fixed inherited bullet colors rendering incorrectly on dark backgrounds.
+- Fixed arched text effects being flattened to ordinary straight text.
+- Fixed text autofit and body positioning mismatches that could cause overflow, unexpected shrinkage, or shifted text relative to its shape.
+- Fixed narrow CJK chart labels being shrunk instead of rendered as wrapped vertical text.
+- Fixed table, image, background, and group rendering defaults that diverged from Office in real-world decks.
+- Fixed standalone `renderSlide()` chart lifecycle cleanup while preserving caller-owned chart instances.
+
 ## [1.0.2] - 2026-03-09
 
 ### Added
