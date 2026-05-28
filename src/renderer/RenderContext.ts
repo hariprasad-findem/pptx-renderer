@@ -9,6 +9,7 @@ import { MasterData } from '../model/Master';
 import { LayoutData } from '../model/Layout';
 import { SafeXmlNode } from '../parser/XmlParser';
 import type { ECharts } from 'echarts';
+import type { PdfjsConfig } from '../utils/pdfRenderer';
 
 export interface RenderContext {
   presentation: PresentationData;
@@ -26,6 +27,8 @@ export interface RenderContext {
   colorCache: Map<string, { color: string; alpha: number }>;
   /** Async media/rendering work that callers may await before screenshot/export. */
   asyncTasks?: Promise<void>[];
+  /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. */
+  pdfjs?: PdfjsConfig;
   /** Shared set of live ECharts instances for explicit disposal. */
   chartInstances?: Set<ECharts>;
   /** Fill node from parent group's grpSpPr, used to resolve `a:grpFill` in children. */
@@ -43,6 +46,7 @@ export function createRenderContext(
   slide: SlideData,
   mediaUrlCache?: Map<string, string>,
   chartInstances?: Set<ECharts>,
+  pdfjs?: PdfjsConfig,
 ): RenderContext {
   // Resolve the chain: slide -> layout -> master -> theme
   const layoutPath = presentation.slideToLayout.get(slide.index) || '';
@@ -87,6 +91,7 @@ export function createRenderContext(
     masterPath,
     mediaUrlCache: mediaUrlCache ?? new Map(),
     colorCache: new Map(),
+    pdfjs,
     chartInstances,
   };
 }

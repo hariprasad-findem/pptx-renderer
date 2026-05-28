@@ -564,7 +564,7 @@ function renderEmfPdf(
     return;
   }
 
-  const task = renderPdfToImage(pdfData, node.size.w, node.size.h)
+  const task = renderPdfToImage(pdfData, node.size.w, node.size.h, ctx.pdfjs)
     .then((url) => {
       if (url) {
         ctx.mediaUrlCache.set(cacheKey, url);

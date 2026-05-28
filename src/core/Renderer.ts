@@ -3,6 +3,7 @@ import type { ZipParseLimits } from '../parser/ZipParser';
 import { buildPresentation } from '../model/Presentation';
 import { PptxViewer, normalizePreviewInput } from './Viewer';
 import type { FitMode, PreviewInput, ListRenderOptions } from './Viewer';
+import type { PdfjsConfig } from '../utils/pdfRenderer';
 
 export type { PreviewInput, FitMode } from './Viewer';
 export type { SlideHandle } from '../renderer/SlideRenderer';
@@ -16,6 +17,8 @@ export interface RendererOptions {
   zoomPercent?: number;
   /** Optional ZIP parsing limits for controlling resource usage and DoS surface. */
   zipLimits?: ZipParseLimits;
+  /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. Use `false` to disable. */
+  pdfjs?: PdfjsConfig;
   /**
    * Number of slides rendered per batch in list mode.
    * Lower values improve UI responsiveness for large decks.
@@ -61,6 +64,7 @@ export class PptxRenderer extends PptxViewer {
       zoomPercent: options.zoomPercent,
       scrollContainer: options.scrollContainer,
       zipLimits: options.zipLimits,
+      pdfjs: options.pdfjs,
       onSlideChange: options.onSlideChange,
       onSlideRendered: options.onSlideRendered,
       onSlideError: options.onSlideError,

@@ -28,6 +28,7 @@ export type {
 // Headless single-slide rendering
 export { renderSlide } from './renderer/SlideRenderer';
 export type { SlideHandle, SlideRendererOptions } from './renderer/SlideRenderer';
+export type { PdfjsOptions, PdfjsConfig } from './utils/pdfRenderer';
 
 // Model types
 export type { SlideData, SlideNode } from './model/Slide';

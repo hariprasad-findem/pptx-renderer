@@ -4,11 +4,18 @@ vi.mock('../../../src/renderer/SlideRenderer', () => ({
   renderSlide: vi.fn(() => {
     const el = document.createElement('div');
     el.className = 'mock-slide';
-    return { element: el, dispose: vi.fn(), [Symbol.dispose]() { this.dispose(); } };
+    return {
+      element: el,
+      dispose: vi.fn(),
+      [Symbol.dispose]() {
+        this.dispose();
+      },
+    };
   }),
 }));
 
 import { PptxViewer } from '../../../src/core/Viewer';
+import { renderSlide as mockRenderSlide } from '../../../src/renderer/SlideRenderer';
 import type { PresentationData } from '../../../src/model/Presentation';
 
 function makeMockPresentation(slideCount = 3): PresentationData {
@@ -180,6 +187,21 @@ describe('PptxViewer load() and renderList()', () => {
     expect(viewer.getMountedSlides()).toEqual([1]);
   });
 
+  it('passes pdfjs options through to the slide renderer', async () => {
+    const container = document.createElement('div');
+    const pdfjs = {
+      moduleUrl: '/assets/pdf.min.mjs',
+      workerUrl: '/assets/pdf.worker.min.mjs',
+    };
+    const viewer = new PptxViewer(container, { pdfjs });
+    viewer.load(makeMockPresentation());
+
+    await viewer.renderSlide(0);
+
+    const lastCall = vi.mocked(mockRenderSlide).mock.calls.at(-1);
+    expect(lastCall?.[2]).toMatchObject({ pdfjs });
+  });
+
   it('renderList({ windowed: true }) uses windowed mounting', async () => {
     const container = document.createElement('div');
     const viewer = new PptxViewer(container);
@@ -255,9 +277,7 @@ describe('render lifecycle events', () => {
 
     expect(start).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledOnce();
-    expect(start.mock.invocationCallOrder[0]).toBeLessThan(
-      complete.mock.invocationCallOrder[0],
-    );
+    expect(start.mock.invocationCallOrder[0]).toBeLessThan(complete.mock.invocationCallOrder[0]);
   });
 
   it('fires renderstart and rendercomplete on renderSlide()', async () => {
@@ -294,9 +314,7 @@ describe('render lifecycle events', () => {
   });
 
   it('fires rendercomplete even when render throws', async () => {
-    const { renderSlide: mockRenderSlide } = await import(
-      '../../../src/renderer/SlideRenderer'
-    );
+    const { renderSlide: mockRenderSlide } = await import('../../../src/renderer/SlideRenderer');
     (mockRenderSlide as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
       throw new Error('boom');
     });
@@ -365,9 +383,7 @@ describe('initial slidechange after render', () => {
 
     await viewer.renderList();
 
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: { index: 0 } }),
-    );
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ detail: { index: 0 } }));
   });
 
   it('fires slidechange after renderSlide(2)', async () => {
@@ -380,9 +396,7 @@ describe('initial slidechange after render', () => {
 
     await viewer.renderSlide(2);
 
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: { index: 2 } }),
-    );
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ detail: { index: 2 } }));
   });
 });
 

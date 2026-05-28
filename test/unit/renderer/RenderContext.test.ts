@@ -4,11 +4,13 @@ import type { PresentationData } from '../../../src/model/Presentation';
 import type { SlideData } from '../../../src/model/Slide';
 import { SafeXmlNode } from '../../../src/parser/XmlParser';
 
-function makePres(opts: {
-  layoutPath?: string;
-  masterPath?: string;
-  themePath?: string;
-} = {}): PresentationData {
+function makePres(
+  opts: {
+    layoutPath?: string;
+    masterPath?: string;
+    themePath?: string;
+  } = {},
+): PresentationData {
   const emptyXml = new SafeXmlNode(null);
   const layoutPath = opts.layoutPath ?? 'ppt/slideLayouts/slideLayout1.xml';
   const masterPath = opts.masterPath ?? 'ppt/slideMasters/slideMaster1.xml';
@@ -19,31 +21,40 @@ function makePres(opts: {
     height: 540,
     slides: [],
     layouts: new Map([
-      [layoutPath, {
-        placeholders: [],
-        spTree: emptyXml,
-        rels: new Map(),
-        showMasterSp: true,
-      }],
+      [
+        layoutPath,
+        {
+          placeholders: [],
+          spTree: emptyXml,
+          rels: new Map(),
+          showMasterSp: true,
+        },
+      ],
     ]),
     masters: new Map([
-      [masterPath, {
-        colorMap: new Map([['tx1', 'dk1']]),
-        textStyles: {},
-        placeholders: [],
-        spTree: emptyXml,
-        rels: new Map(),
-      }],
+      [
+        masterPath,
+        {
+          colorMap: new Map([['tx1', 'dk1']]),
+          textStyles: {},
+          placeholders: [],
+          spTree: emptyXml,
+          rels: new Map(),
+        },
+      ],
     ]),
     themes: new Map([
-      [themePath, {
-        colorScheme: new Map([['dk1', '000000']]),
-        majorFont: { latin: 'Arial', ea: '', cs: '' },
-        minorFont: { latin: 'Arial', ea: '', cs: '' },
-        fillStyles: [],
-        lineStyles: [],
-        effectStyles: [],
-      }],
+      [
+        themePath,
+        {
+          colorScheme: new Map([['dk1', '000000']]),
+          majorFont: { latin: 'Arial', ea: '', cs: '' },
+          minorFont: { latin: 'Arial', ea: '', cs: '' },
+          fillStyles: [],
+          lineStyles: [],
+          effectStyles: [],
+        },
+      ],
     ]),
     slideToLayout: new Map([[0, layoutPath]]),
     layoutToMaster: new Map([[layoutPath, masterPath]]),
@@ -95,6 +106,17 @@ describe('createRenderContext', () => {
     const ctx = createRenderContext(makePres(), makeSlide(), cache);
     expect(ctx.mediaUrlCache).toBe(cache);
     expect(ctx.mediaUrlCache.get('test.png')).toBe('blob:123');
+  });
+
+  it('carries optional pdfjs rendering configuration', () => {
+    const pdfjs = {
+      moduleUrl: '/assets/pdf.min.mjs',
+      workerUrl: '/assets/pdf.worker.min.mjs',
+    };
+
+    const ctx = createRenderContext(makePres(), makeSlide(), undefined, undefined, pdfjs);
+
+    expect(ctx.pdfjs).toBe(pdfjs);
   });
 
   it('creates new mediaUrlCache when not provided', () => {

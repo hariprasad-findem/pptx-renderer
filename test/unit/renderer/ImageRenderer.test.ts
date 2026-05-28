@@ -7,14 +7,16 @@ import type { RenderContext } from '../../../src/renderer/RenderContext';
 
 /** Helper: create a minimal PicNodeData for testing. */
 function createPicNode(overrides: Partial<PicNodeData> = {}): PicNodeData {
-  const source = overrides.source ?? xmlNode(
-    `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+  const source =
+    overrides.source ??
+    xmlNode(
+      `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
       <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
       <blipFill><blip r:embed="rId1"/></blipFill>
       <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
     </pic>`,
-  );
+    );
 
   return {
     id: '1',
@@ -1710,7 +1712,10 @@ describe('renderImage', () => {
 
     it('handles very large dimensions', () => {
       const ctx = createCtxWithMedia();
-      const node = createPicNode({ position: { x: 10000, y: 20000 }, size: { w: 50000, h: 100000 } });
+      const node = createPicNode({
+        position: { x: 10000, y: 20000 },
+        size: { w: 50000, h: 100000 },
+      });
       const el = renderImage(node, ctx);
       expect(el.style.left).toBe('10000px');
       expect(el.style.top).toBe('20000px');
@@ -1728,7 +1733,10 @@ describe('renderImage', () => {
 
     it('handles floating point positions', () => {
       const ctx = createCtxWithMedia();
-      const node = createPicNode({ position: { x: 123.456, y: 789.012 }, size: { w: 345.67, h: 890.12 } });
+      const node = createPicNode({
+        position: { x: 123.456, y: 789.012 },
+        size: { w: 345.67, h: 890.12 },
+      });
       const el = renderImage(node, ctx);
       expect(el.style.left).toContain('123.456');
       expect(el.style.top).toContain('789.012');
@@ -1835,12 +1843,21 @@ describe('renderImage', () => {
       if (tag === 'img') {
         const stub = originalCreateElement('img') as HTMLImageElement;
         Object.defineProperty(stub, 'complete', { get: () => true, configurable: true });
-        Object.defineProperty(stub, 'naturalWidth', { get: () => naturalWidth, configurable: true });
-        Object.defineProperty(stub, 'naturalHeight', { get: () => naturalHeight, configurable: true });
+        Object.defineProperty(stub, 'naturalWidth', {
+          get: () => naturalWidth,
+          configurable: true,
+        });
+        Object.defineProperty(stub, 'naturalHeight', {
+          get: () => naturalHeight,
+          configurable: true,
+        });
         let _src = '';
         Object.defineProperty(stub, 'src', {
           get: () => _src,
-          set: (v: string) => { _src = v; srcHistory.push(v); },
+          set: (v: string) => {
+            _src = v;
+            srcHistory.push(v);
+          },
           configurable: true,
         });
         return stub;
@@ -1942,7 +1959,9 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
@@ -1991,7 +2010,9 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
@@ -2048,7 +2069,11 @@ describe('renderImage', () => {
     });
 
     it('applies lum effect immediately when only brightness is non-zero', () => {
-      const { spy, srcHistory } = interceptCreateElement(1, 1, new Uint8ClampedArray([50, 50, 50, 255]));
+      const { spy, srcHistory } = interceptCreateElement(
+        1,
+        1,
+        new Uint8ClampedArray([50, 50, 50, 255]),
+      );
       const ctx = createCtxWithMedia();
 
       try {
@@ -2069,7 +2094,11 @@ describe('renderImage', () => {
     });
 
     it('applies lum effect immediately when only contrast is non-zero', () => {
-      const { spy, srcHistory } = interceptCreateElement(1, 1, new Uint8ClampedArray([150, 150, 150, 255]));
+      const { spy, srcHistory } = interceptCreateElement(
+        1,
+        1,
+        new Uint8ClampedArray([150, 150, 150, 255]),
+      );
       const ctx = createCtxWithMedia();
 
       try {
@@ -2102,7 +2131,9 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
@@ -2146,13 +2177,19 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
         }
         if (tag === 'canvas') {
-          const { mockCanvas, ctx2d } = makeMockCanvas2d(1, 1, new Uint8ClampedArray([80, 80, 80, 255]));
+          const { mockCanvas, ctx2d } = makeMockCanvas2d(
+            1,
+            1,
+            new Uint8ClampedArray([80, 80, 80, 255]),
+          );
           ctx2d.drawImage.mockImplementation((...a) => drawImageCalls.push(a));
           return mockCanvas as unknown as HTMLCanvasElement;
         }
@@ -2235,7 +2272,7 @@ describe('renderImage', () => {
     });
 
     it('treats threshold 0 — every pixel maps to white (luminance always >= 0)', () => {
-      expect(biLevelPixel(0, 0, 0, 0).r).toBe(255);   // even pure black
+      expect(biLevelPixel(0, 0, 0, 0).r).toBe(255); // even pure black
       expect(biLevelPixel(0, 1, 1, 1).r).toBe(255);
     });
 
@@ -2327,7 +2364,9 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
@@ -2376,7 +2415,9 @@ describe('renderImage', () => {
           let _src = '';
           Object.defineProperty(stub, 'src', {
             get: () => _src,
-            set: (v: string) => { _src = v; },
+            set: (v: string) => {
+              _src = v;
+            },
             configurable: true,
           });
           return stub;
@@ -2449,7 +2490,9 @@ describe('renderImage', () => {
      * then linearly interpolate between color1 (dark) and color2 (light).
      */
     function duotonePixel(
-      r: number, g: number, b: number,
+      r: number,
+      g: number,
+      b: number,
       c1: { r: number; g: number; b: number },
       c2: { r: number; g: number; b: number },
     ) {
@@ -2506,10 +2549,7 @@ describe('renderImage', () => {
     function createEmfCtx(emfData?: Uint8Array): RenderContext {
       const ctx = createMockRenderContext();
       ctx.slide.rels.set('rId1', { type: 'image', target: 'ppt/media/image1.emf' });
-      ctx.presentation.media.set(
-        'ppt/media/image1.emf',
-        emfData ?? new Uint8Array([0x01]),
-      );
+      ctx.presentation.media.set('ppt/media/image1.emf', emfData ?? new Uint8Array([0x01]));
       return ctx;
     }
 
@@ -2546,7 +2586,12 @@ describe('renderImage', () => {
 
     it('dispatches to renderEmfBitmap when parseEmfContent returns bitmap type', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(2 * 2 * 4), width: 2, height: 2, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(2 * 2 * 4),
+        width: 2,
+        height: 2,
+        colorSpace: 'srgb' as const,
+      };
       const spy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,
@@ -2554,13 +2599,15 @@ describe('renderImage', () => {
 
       // Mock canvas so getContext returns null (avoids jsdom "not implemented" error)
       const origCreateElement = document.createElement.bind(document);
-      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        const el = origCreateElement(tag, options);
-        if (tag === 'canvas') {
-          el.getContext = () => null;
-        }
-        return el;
-      });
+      const createElementSpy = vi
+        .spyOn(document, 'createElement')
+        .mockImplementation((tag: string, options?: ElementCreationOptions) => {
+          const el = origCreateElement(tag, options);
+          if (tag === 'canvas') {
+            el.getContext = () => null;
+          }
+          return el;
+        });
 
       const ctx = createEmfCtx();
       const node = createPicNode({ blipEmbed: 'rId1' });
@@ -2672,7 +2719,9 @@ describe('renderImage', () => {
         type: 'pdf',
         data: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
       });
-      const pdfSpy = vi.spyOn(pdfModule, 'renderPdfToImage').mockResolvedValue('blob:tracked-pdf-url');
+      const pdfSpy = vi
+        .spyOn(pdfModule, 'renderPdfToImage')
+        .mockResolvedValue('blob:tracked-pdf-url');
 
       const ctx = createEmfCtx() as RenderContext & { asyncTasks: Promise<void>[] };
       ctx.asyncTasks = [];
@@ -2683,6 +2732,38 @@ describe('renderImage', () => {
       await Promise.all(ctx.asyncTasks);
 
       expect(el.querySelector('img')?.src).toContain('blob:tracked-pdf-url');
+
+      emfSpy.mockRestore();
+      pdfSpy.mockRestore();
+    });
+
+    it('passes pdfjs options from render context to EMF PDF rendering', async () => {
+      const emfModule = await import('../../../src/utils/emfParser');
+      const pdfModule = await import('../../../src/utils/pdfRenderer');
+      const emfSpy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
+        type: 'pdf',
+        data: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      });
+      const pdfSpy = vi.spyOn(pdfModule, 'renderPdfToImage').mockResolvedValue('blob:pdf-url');
+
+      const ctx = createEmfCtx() as RenderContext & {
+        pdfjs: { moduleUrl: string; workerUrl: string };
+      };
+      ctx.pdfjs = {
+        moduleUrl: '/assets/pdf.min.mjs',
+        workerUrl: '/assets/pdf.worker.min.mjs',
+      };
+      const node = createPicNode({ blipEmbed: 'rId1' });
+      renderImage(node, ctx);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(pdfSpy).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        node.size.w,
+        node.size.h,
+        ctx.pdfjs,
+      );
 
       emfSpy.mockRestore();
       pdfSpy.mockRestore();
@@ -2717,7 +2798,9 @@ describe('renderImage', () => {
         type: 'pdf',
         data: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
       });
-      const pdfSpy = vi.spyOn(pdfModule, 'renderPdfToImage').mockRejectedValue(new Error('PDF failed'));
+      const pdfSpy = vi
+        .spyOn(pdfModule, 'renderPdfToImage')
+        .mockRejectedValue(new Error('PDF failed'));
 
       const ctx = createEmfCtx();
       const node = createPicNode({ blipEmbed: 'rId1' });
@@ -2742,7 +2825,12 @@ describe('renderImage', () => {
 
     it('uses cached URL when emf-bitmap cache key exists', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(2 * 2 * 4), width: 2, height: 2, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(2 * 2 * 4),
+        width: 2,
+        height: 2,
+        colorSpace: 'srgb' as const,
+      };
       const spy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,
@@ -2767,7 +2855,12 @@ describe('renderImage', () => {
 
     it('exits early when canvas context is null (jsdom)', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(4 * 4 * 4), width: 4, height: 4, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(4 * 4 * 4),
+        width: 4,
+        height: 4,
+        colorSpace: 'srgb' as const,
+      };
       const spy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,
@@ -2775,13 +2868,15 @@ describe('renderImage', () => {
 
       // Force getContext to return null to test the early-exit path
       const origCreateElement = document.createElement.bind(document);
-      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        const el = origCreateElement(tag, options);
-        if (tag === 'canvas') {
-          el.getContext = () => null;
-        }
-        return el;
-      });
+      const createElementSpy = vi
+        .spyOn(document, 'createElement')
+        .mockImplementation((tag: string, options?: ElementCreationOptions) => {
+          const el = origCreateElement(tag, options);
+          if (tag === 'canvas') {
+            el.getContext = () => null;
+          }
+          return el;
+        });
 
       const ctx = createEmfCtx();
       const node = createPicNode({ blipEmbed: 'rId1' });
@@ -2797,7 +2892,12 @@ describe('renderImage', () => {
 
     it('renders bitmap via canvas when getContext succeeds', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(2 * 2 * 4), width: 2, height: 2, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(2 * 2 * 4),
+        width: 2,
+        height: 2,
+        colorSpace: 'srgb' as const,
+      };
       const emfSpy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,
@@ -2807,17 +2907,19 @@ describe('renderImage', () => {
       const mockCtx2d = { putImageData: vi.fn() };
       const fakeBlob = new Blob(['fake'], { type: 'image/png' });
       const origCreateElement = document.createElement.bind(document);
-      const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        if (tag === 'canvas') {
-          const canvas = origCreateElement('canvas', options);
-          // Override getContext to return our mock
-          (canvas as any).getContext = (_type: string) => mockCtx2d;
-          // Override toBlob to synchronously call the callback
-          (canvas as any).toBlob = (cb: BlobCallback) => cb(fakeBlob);
-          return canvas;
-        }
-        return origCreateElement(tag, options);
-      });
+      const createSpy = vi
+        .spyOn(document, 'createElement')
+        .mockImplementation((tag: string, options?: ElementCreationOptions) => {
+          if (tag === 'canvas') {
+            const canvas = origCreateElement('canvas', options);
+            // Override getContext to return our mock
+            (canvas as any).getContext = (_type: string) => mockCtx2d;
+            // Override toBlob to synchronously call the callback
+            (canvas as any).toBlob = (cb: BlobCallback) => cb(fakeBlob);
+            return canvas;
+          }
+          return origCreateElement(tag, options);
+        });
 
       const ctx = createEmfCtx();
       const node = createPicNode({ blipEmbed: 'rId1' });
@@ -2839,7 +2941,12 @@ describe('renderImage', () => {
 
     it('handles null blob from canvas.toBlob gracefully', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(2 * 2 * 4), width: 2, height: 2, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(2 * 2 * 4),
+        width: 2,
+        height: 2,
+        colorSpace: 'srgb' as const,
+      };
       const emfSpy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,
@@ -2847,16 +2954,18 @@ describe('renderImage', () => {
 
       const mockCtx2d = { putImageData: vi.fn() };
       const origCreateElement = document.createElement.bind(document);
-      const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        if (tag === 'canvas') {
-          const canvas = origCreateElement('canvas', options);
-          (canvas as any).getContext = (_type: string) => mockCtx2d;
-          // toBlob returns null blob
-          (canvas as any).toBlob = (cb: BlobCallback) => cb(null);
-          return canvas;
-        }
-        return origCreateElement(tag, options);
-      });
+      const createSpy = vi
+        .spyOn(document, 'createElement')
+        .mockImplementation((tag: string, options?: ElementCreationOptions) => {
+          if (tag === 'canvas') {
+            const canvas = origCreateElement('canvas', options);
+            (canvas as any).getContext = (_type: string) => mockCtx2d;
+            // toBlob returns null blob
+            (canvas as any).toBlob = (cb: BlobCallback) => cb(null);
+            return canvas;
+          }
+          return origCreateElement(tag, options);
+        });
 
       const ctx = createEmfCtx();
       const node = createPicNode({ blipEmbed: 'rId1' });
@@ -2906,7 +3015,12 @@ describe('renderImage', () => {
 
     it('creates img with correct styles from createFillImage via bitmap cache', async () => {
       const emfModule = await import('../../../src/utils/emfParser');
-      const fakeImageData = { data: new Uint8ClampedArray(1 * 1 * 4), width: 1, height: 1, colorSpace: 'srgb' as const };
+      const fakeImageData = {
+        data: new Uint8ClampedArray(1 * 1 * 4),
+        width: 1,
+        height: 1,
+        colorSpace: 'srgb' as const,
+      };
       const spy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
         type: 'bitmap',
         imageData: fakeImageData as unknown as ImageData,

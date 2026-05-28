@@ -15,33 +15,71 @@
  * fallback, no global state pollution.
  */
 
+export interface PdfjsOptions {
+  /**
+   * URL for the pdfjs ESM module, for example
+   * `new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString()`.
+   */
+  moduleUrl?: string;
+  /**
+   * URL for the pdfjs worker ESM module, for example
+   * `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()`.
+   */
+  workerUrl?: string;
+}
+
+export type PdfjsConfig = PdfjsOptions | false;
+
 // ---------------------------------------------------------------------------
-// Resolved pdfjs URL — computed once from main thread's module resolution
+// Resolved pdfjs URL — computed once from optional module resolution
 // ---------------------------------------------------------------------------
+
+const PDFJS_MODULE_SPECIFIER = 'pdfjs-dist/build/pdf.min.mjs';
+const PDFJS_WORKER_SPECIFIER = 'pdfjs-dist/build/pdf.worker.min.mjs';
 
 let _pdfjsUrl: string | null = null;
 let _pdfWorkerUrl: string | null = null;
 
+function resolveModuleUrl(specifier: string): string | null {
+  try {
+    const resolver = (import.meta as ImportMeta & { resolve?: (id: string) => string }).resolve;
+    if (typeof resolver === 'function') {
+      return resolver(specifier);
+    }
+  } catch {
+    // The host runtime does not expose import.meta.resolve, or cannot resolve pdfjs-dist.
+  }
+  return null;
+}
+
+function explicitUrl(config: PdfjsConfig | undefined, key: keyof PdfjsOptions): string | null {
+  if (!config || typeof config !== 'object') return null;
+  const url = config[key];
+  if (typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  return trimmed || null;
+}
+
 function getPdfjsUrl(): string | null {
   if (_pdfjsUrl !== null) return _pdfjsUrl;
-  try {
-    // Resolve via the bundler/dev server so the URL is usable from a Worker
-    _pdfjsUrl = new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString();
-  } catch {
-    _pdfjsUrl = '';
-  }
+  _pdfjsUrl = resolveModuleUrl(PDFJS_MODULE_SPECIFIER) ?? '';
   return _pdfjsUrl || null;
 }
 
 function getPdfWorkerUrl(): string | null {
   if (_pdfWorkerUrl !== null) return _pdfWorkerUrl;
-  try {
-    // pdfjs still needs its own workerSrc even when invoked from our isolated worker.
-    _pdfWorkerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-  } catch {
-    _pdfWorkerUrl = '';
-  }
+  _pdfWorkerUrl = resolveModuleUrl(PDFJS_WORKER_SPECIFIER) ?? '';
   return _pdfWorkerUrl || null;
+}
+
+function resolvePdfjsUrl(config?: PdfjsConfig): string | null {
+  if (config === false) return null;
+  return explicitUrl(config, 'moduleUrl') ?? getPdfjsUrl();
+}
+
+function resolvePdfWorkerUrl(config?: PdfjsConfig): string | null {
+  if (config === false) return null;
+  return explicitUrl(config, 'workerUrl') ?? getPdfWorkerUrl();
 }
 
 // ---------------------------------------------------------------------------
@@ -55,9 +93,8 @@ function getPdfWorkerUrl(): string | null {
  *
  * The worker loads its OWN pdfjs instance via dynamic import, so its static
  * PagesMapper state is completely independent of the main thread.
- * pdfjs's own internal worker is disabled (workerPort = null, workerSrc = '')
- * so pdfjs runs single-threaded inside this worker — acceptable for tiny
- * 1-page EMF PDFs.
+ * pdfjs's own workerSrc is configured inside this isolated worker, so host
+ * applications can keep their main-thread pdfjs settings untouched.
  */
 const WORKER_SRC = /* js */ `
 let pdfjsLib = null;
@@ -96,28 +133,44 @@ self.onmessage = async (e) => {
 };
 `;
 
-let _worker: Worker | null = null;
-let _workerFailed = false;
-let _msgId = 0;
-const _pending = new Map<
-  number,
-  { resolve: (b: Blob | null) => void; reject: (e: Error) => void }
->();
+interface WorkerState {
+  worker: Worker | null;
+  failed: boolean;
+  msgId: number;
+  pending: Map<number, { resolve: (b: Blob | null) => void; reject: (e: Error) => void }>;
+}
 
-function getWorker(_pdfjsUrl: string): Worker | null {
-  if (_workerFailed) return null;
-  if (_worker) return _worker;
+const _workers = new Map<string, WorkerState>();
+
+function getWorkerState(workerKey: string): WorkerState {
+  let state = _workers.get(workerKey);
+  if (!state) {
+    state = {
+      worker: null,
+      failed: false,
+      msgId: 0,
+      pending: new Map(),
+    };
+    _workers.set(workerKey, state);
+  }
+  return state;
+}
+
+function getWorker(workerKey: string): Worker | null {
+  const state = getWorkerState(workerKey);
+  if (state.failed) return null;
+  if (state.worker) return state.worker;
 
   try {
     const blob = new Blob([WORKER_SRC], { type: 'text/javascript' });
     const url = URL.createObjectURL(blob);
-    _worker = new Worker(url, { type: 'module' });
+    state.worker = new Worker(url, { type: 'module' });
 
-    _worker.onmessage = (e: MessageEvent) => {
+    state.worker.onmessage = (e: MessageEvent) => {
       const { id, blob, error } = e.data;
-      const entry = _pending.get(id);
+      const entry = state.pending.get(id);
       if (!entry) return;
-      _pending.delete(id);
+      state.pending.delete(id);
       if (error) {
         entry.resolve(null); // Treat worker-side errors as "no result"
       } else {
@@ -125,19 +178,19 @@ function getWorker(_pdfjsUrl: string): Worker | null {
       }
     };
 
-    _worker.onerror = () => {
+    state.worker.onerror = () => {
       // Worker failed to initialize (e.g. module import blocked by CSP)
-      _workerFailed = true;
-      _worker = null;
-      for (const [, entry] of _pending) {
+      state.failed = true;
+      state.worker = null;
+      for (const [, entry] of state.pending) {
         entry.resolve(null);
       }
-      _pending.clear();
+      state.pending.clear();
     };
 
-    return _worker;
+    return state.worker;
   } catch {
-    _workerFailed = true;
+    state.failed = true;
     return null;
   }
 }
@@ -150,14 +203,16 @@ function renderInWorker(
   pdfWorkerUrl: string,
 ): Promise<Blob | null> {
   return new Promise((resolve) => {
-    const worker = getWorker(pdfjsUrl);
+    const workerKey = `${pdfjsUrl}\n${pdfWorkerUrl}`;
+    const state = getWorkerState(workerKey);
+    const worker = getWorker(workerKey);
     if (!worker) {
       resolve(null);
       return;
     }
 
-    const id = ++_msgId;
-    _pending.set(id, {
+    const id = ++state.msgId;
+    state.pending.set(id, {
       resolve,
       reject: () => resolve(null),
     });
@@ -168,8 +223,8 @@ function renderInWorker(
 
     // Timeout: if worker doesn't respond in 15s, give up
     setTimeout(() => {
-      if (_pending.has(id)) {
-        _pending.delete(id);
+      if (state.pending.has(id)) {
+        state.pending.delete(id);
         resolve(null);
       }
     }, 15000);
@@ -193,9 +248,10 @@ export async function renderPdfToImage(
   pdfData: Uint8Array,
   width: number,
   height: number,
+  pdfjs?: PdfjsConfig,
 ): Promise<string | null> {
-  const pdfjsUrl = getPdfjsUrl();
-  const pdfWorkerUrl = getPdfWorkerUrl();
+  const pdfjsUrl = resolvePdfjsUrl(pdfjs);
+  const pdfWorkerUrl = resolvePdfWorkerUrl(pdfjs);
 
   if (
     !pdfjsUrl ||

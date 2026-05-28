@@ -334,6 +334,10 @@
         'pdfjs-dist/build/pdf.worker.mjs',
         import.meta.url,
       ).toString();
+      const rendererPdfjs = {
+        moduleUrl: new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString(),
+        workerUrl: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(),
+      };
 
       // -----------------------------------------------------------------------
       // State
@@ -941,6 +945,7 @@
             fitMode: 'none',
             renderMode: 'list',
             zipLimits: RECOMMENDED_ZIP_LIMITS,
+            pdfjs: rendererPdfjs,
             listOptions: buildListOptions(),
           });
           const renderMs = performance.now() - renderStart;

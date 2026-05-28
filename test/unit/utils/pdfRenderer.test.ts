@@ -127,7 +127,48 @@ describe('pdfRenderer', () => {
     expect(pdfjsMock.getDocument).not.toHaveBeenCalled();
   });
 
-  it('passes the pdfjs worker module URL to the isolated renderer worker', async () => {
+  it('returns null without creating a worker when pdfjs URLs are unavailable', async () => {
+    vi.resetModules();
+
+    const originalWorker = globalThis.Worker;
+    const originalOffscreenCanvas = globalThis.OffscreenCanvas;
+    let workerCreated = false;
+
+    class MockWorker {
+      constructor() {
+        workerCreated = true;
+      }
+    }
+
+    try {
+      Object.defineProperty(globalThis, 'Worker', {
+        configurable: true,
+        value: MockWorker,
+      });
+      Object.defineProperty(globalThis, 'OffscreenCanvas', {
+        configurable: true,
+        value: class MockOffscreenCanvas {},
+      });
+
+      const mod = await import('../../../src/utils/pdfRenderer');
+      const result = await mod.renderPdfToImage(new Uint8Array([0x25, 0x50, 0x44, 0x46]), 32, 24);
+
+      expect(result).toBeNull();
+      expect(workerCreated).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, 'Worker', {
+        configurable: true,
+        value: originalWorker,
+      });
+      Object.defineProperty(globalThis, 'OffscreenCanvas', {
+        configurable: true,
+        value: originalOffscreenCanvas,
+      });
+      vi.resetModules();
+    }
+  });
+
+  it('uses explicit pdfjs module and worker URLs when provided', async () => {
     vi.resetModules();
 
     const originalWorker = globalThis.Worker;
@@ -169,17 +210,62 @@ describe('pdfRenderer', () => {
         .mockReturnValueOnce('blob:rendered-pdf');
 
       const mod = await import('../../../src/utils/pdfRenderer');
+      const result = await mod.renderPdfToImage(new Uint8Array([0x25, 0x50, 0x44, 0x46]), 32, 24, {
+        moduleUrl: '/assets/pdf.min.mjs',
+        workerUrl: '/assets/pdf.worker.min.mjs',
+      });
+
+      expect(result).toBe('blob:rendered-pdf');
+      expect(postedMessage?.pdfjsUrl).toBe('/assets/pdf.min.mjs');
+      expect(postedMessage?.pdfWorkerUrl).toBe('/assets/pdf.worker.min.mjs');
+
+      createObjectUrlSpy.mockRestore();
+    } finally {
+      Object.defineProperty(globalThis, 'Worker', {
+        configurable: true,
+        value: originalWorker,
+      });
+      Object.defineProperty(globalThis, 'OffscreenCanvas', {
+        configurable: true,
+        value: originalOffscreenCanvas,
+      });
+      vi.resetModules();
+    }
+  });
+
+  it('returns null without creating a worker when pdfjs rendering is disabled', async () => {
+    vi.resetModules();
+
+    const originalWorker = globalThis.Worker;
+    const originalOffscreenCanvas = globalThis.OffscreenCanvas;
+    let workerCreated = false;
+
+    class MockWorker {
+      constructor() {
+        workerCreated = true;
+      }
+    }
+
+    try {
+      Object.defineProperty(globalThis, 'Worker', {
+        configurable: true,
+        value: MockWorker,
+      });
+      Object.defineProperty(globalThis, 'OffscreenCanvas', {
+        configurable: true,
+        value: class MockOffscreenCanvas {},
+      });
+
+      const mod = await import('../../../src/utils/pdfRenderer');
       const result = await mod.renderPdfToImage(
         new Uint8Array([0x25, 0x50, 0x44, 0x46]),
         32,
         24,
+        false,
       );
 
-      expect(result).toBe('blob:rendered-pdf');
-      expect(postedMessage?.pdfjsUrl).toEqual(expect.stringContaining('pdf'));
-      expect(postedMessage?.pdfWorkerUrl).toEqual(expect.stringContaining('pdf.worker'));
-
-      createObjectUrlSpy.mockRestore();
+      expect(result).toBeNull();
+      expect(workerCreated).toBe(false);
     } finally {
       Object.defineProperty(globalThis, 'Worker', {
         configurable: true,

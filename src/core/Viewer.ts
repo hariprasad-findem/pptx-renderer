@@ -5,6 +5,7 @@ import { renderSlide as renderSlideInternal } from '../renderer/SlideRenderer';
 import type { SlideHandle } from '../renderer/SlideRenderer';
 import { isAllowedExternalUrl } from '../utils/urlSafety';
 import type { ECharts } from 'echarts';
+import type { PdfjsConfig } from '../utils/pdfRenderer';
 
 export type { SlideHandle } from '../renderer/SlideRenderer';
 
@@ -26,6 +27,8 @@ export interface ViewerOptions {
   scrollContainer?: HTMLElement;
   /** Optional ZIP parsing limits for controlling resource usage and DoS surface. */
   zipLimits?: ZipParseLimits;
+  /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. Use `false` to disable. */
+  pdfjs?: PdfjsConfig;
   onSlideChange?: (index: number) => void;
   onSlideRendered?: (index: number, element: HTMLElement) => void;
   onSlideError?: (index: number, error: unknown) => void;
@@ -409,6 +412,7 @@ export class PptxViewer extends EventTarget {
       onNodeError: (nodeId, error) => this.emitNodeError(nodeId, error),
       onNavigate: (target) => this.handleNavigate(target),
       mediaUrlCache: this.mediaUrlCache,
+      pdfjs: this.viewerOptions.pdfjs,
       chartInstances: this.chartInstances,
     });
 
@@ -663,6 +667,7 @@ export class PptxViewer extends EventTarget {
         onNodeError: (nodeId, error) => this.emitNodeError(nodeId, error),
         onNavigate: (target) => this.handleNavigate(target),
         mediaUrlCache: this.mediaUrlCache,
+        pdfjs: this.viewerOptions.pdfjs,
         chartInstances: this.chartInstances,
       });
 
@@ -892,6 +897,7 @@ export class PptxViewer extends EventTarget {
         onNodeError: (nodeId, error) => this.emitNodeError(nodeId, error),
         onNavigate: (target) => this.handleNavigate(target),
         mediaUrlCache: this.mediaUrlCache,
+        pdfjs: this.viewerOptions.pdfjs,
         chartInstances: this.chartInstances,
       });
       this.slideHandles.set(this.currentSlide, handle);

@@ -52,6 +52,11 @@
       import { parseZip, buildPresentation, RECOMMENDED_ZIP_LIMITS } from '../../src/index.ts';
       import { renderSlide } from '../../src/renderer/SlideRenderer.ts';
 
+      const pdfjs = {
+        moduleUrl: new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString(),
+        workerUrl: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(),
+      };
+
       const fileSelect = document.getElementById('file-select');
       const slideSelect = document.getElementById('slide-select');
       const btnPrev = document.getElementById('btn-prev');
@@ -153,7 +158,7 @@
 
         container.innerHTML = '';
         const slide = presentation.slides[idx];
-        const handle = renderSlide(presentation, slide, { mediaUrlCache: mediaCache });
+        const handle = renderSlide(presentation, slide, { mediaUrlCache: mediaCache, pdfjs });
         currentHandle = handle;
 
         const wrapper = document.createElement('div');

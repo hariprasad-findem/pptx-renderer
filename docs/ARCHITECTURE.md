@@ -53,6 +53,8 @@ Responsibilities:
 - Typed `on()` / `off()` helpers and state getters (`isRendering`, `zoomPercent`, `fitMode`).
 - Manage media object URL lifecycle (blob URLs tracked per-handle and per-viewer).
 - Handle internal/external navigation (with URL safety checks).
+- Render common EMF fallback previews when the file contains embedded bitmap data or,
+  with optional `pdfjs` URLs, an embedded PDF preview.
 
 ## Rendering Strategies
 
@@ -68,8 +70,11 @@ This keeps default behavior backward compatible while enabling lower memory pres
 - Keep parser/model deterministic for reproducible QA runs.
 - Keep rendering resilient: per-node/per-slide failures should not crash the whole deck.
 - Keep security boundaries explicit at parse and navigation boundaries.
+- Keep optional heavy dependencies such as `pdfjs-dist` outside the core render path unless
+  the consumer explicitly configures them.
 
 ## Non-Goals (Current)
 
 - Full fidelity parity with Microsoft PowerPoint for every OOXML edge case.
 - Server-side rendering runtime in this repository.
+- Full EMF/WMF vector instruction rendering. EMF support is limited to fallback previews.

@@ -37,6 +37,9 @@ Every rendering capability is automatically verified against PowerPoint output. 
 npm install @aiden0z/pptx-renderer
 # or
 pnpm add @aiden0z/pptx-renderer
+
+# Optional: only needed for SmartArt / EMF files with embedded PDF fallback previews
+pnpm add pdfjs-dist
 ```
 
 Requires Node.js 20+ for development. Runtime is browser-only.
@@ -55,6 +58,33 @@ const viewer = await PptxViewer.open(await resp.arrayBuffer(), container, {
   listOptions: { windowed: true },
 });
 ```
+
+### Optional PDF.js Fallback for SmartArt/EMF Preview Images
+
+PowerPoint often stores SmartArt or pasted vector artwork as EMF fallback images. This
+library does **not** implement a full EMF/WMF vector renderer. It can render the common
+Office fallback cases where an EMF contains an embedded PDF preview or bitmap preview.
+
+For EMF files with embedded PDF previews, install `pdfjs-dist` and pass explicit asset
+URLs. This keeps PDF.js optional and avoids forcing every consumer bundle to include it.
+
+```ts
+import { PptxViewer } from '@aiden0z/pptx-renderer';
+
+const pdfjs = {
+  moduleUrl: new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString(),
+  workerUrl: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(),
+};
+
+const viewer = await PptxViewer.open(buffer, container, {
+  pdfjs,
+});
+```
+
+If your app uses a CDN or pre-copied assets, point those fields at your hosted files.
+Set `pdfjs: false` to disable EMF-PDF fallback rendering entirely. With no `pdfjs`
+configuration, the renderer attempts only a best-effort automatic resolution and
+otherwise degrades gracefully.
 
 Or with more control over each step:
 
@@ -102,6 +132,7 @@ const viewer = await PptxViewer.open(buffer, container, {
 | `zoomPercent`      | `number`                   | `100`       | Zoom level (10–400)                                                                                    |
 | `scrollContainer`  | `HTMLElement`              | --          | Scroll container for IntersectionObserver root                                                         |
 | `zipLimits`        | `ZipParseLimits`           | --          | Security limits for ZIP parsing (used by `.open()`). Use `RECOMMENDED_ZIP_LIMITS` for untrusted input. |
+| `pdfjs`            | `PdfjsConfig`              | --          | Optional PDF.js URLs for EMF-embedded PDF fallback rendering, or `false` to disable it.                |
 | `onSlideChange`    | `(index) => void`          | --          | Shorthand for `slidechange` event                                                                      |
 | `onSlideRendered`  | `(index, element) => void` | --          | Shorthand for `sliderendered` event                                                                    |
 | `onSlideError`     | `(index, error) => void`   | --          | Shorthand for `slideerror` event                                                                       |
@@ -241,8 +272,12 @@ import type { SlideHandle } from '@aiden0z/pptx-renderer';
 const handle = renderSlide(presentation, presentation.slides[0], {
   onNodeError: (nodeId, err) => console.warn(nodeId, err),
   mediaUrlCache: new Map(), // optional shared cache for blob URLs
+  pdfjs, // optional, only for EMF-embedded PDF fallback rendering
 });
 document.body.appendChild(handle.element);
+
+// Await async media such as EMF-PDF fallback previews before screenshots/exports.
+await handle.ready;
 
 // Clean up when done (disposes charts + blob URLs in standalone mode)
 handle.dispose();
@@ -281,6 +316,8 @@ import type {
   ListRenderOptions,
   PptxViewerEventMap,
   SlideHandle,
+  PdfjsOptions,
+  PdfjsConfig,
 } from '@aiden0z/pptx-renderer';
 ```
 
@@ -322,7 +359,7 @@ OOXML 3D chart elements such as `bar3DChart`, `line3DChart`, `pie3DChart`, `area
 
 ### SmartArt, Tables, Images & More
 
-- **SmartArt**: 134+ layouts via PowerPoint fallback data (embedded EMF/PDF rendered with [pdfjs-dist](https://mozilla.github.io/pdf.js/))
+- **SmartArt**: 134+ layouts via PowerPoint fallback data. EMF-embedded PDF previews can be rendered with optional [pdfjs-dist](https://mozilla.github.io/pdf.js/) configuration.
 - **Tables**: OOXML table styles, cell merge, border inheritance
 - **Images**: blob URL with crop, stretch/tile, video/audio placeholders
 - **Groups**: coordinate remapping with recursive child rendering
@@ -407,7 +444,7 @@ Dev pages at `http://127.0.0.1:5173`:
 
 ## What's Not Yet Supported
 
-3D effects, true 3D chart perspective/depth/surface meshes, animations/transitions, equations (OMML), EMF/WMF vector rendering, shadow/reflection/glow effects, embedded OLE objects, and slide notes rendering.
+3D effects, true 3D chart perspective/depth/surface meshes, animations/transitions, equations (OMML), full EMF/WMF vector rendering, shadow/reflection/glow effects, embedded OLE objects, and slide notes rendering.
 
 ## FAQ
 

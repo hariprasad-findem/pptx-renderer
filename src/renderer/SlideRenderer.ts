@@ -20,6 +20,7 @@ import { BaseNodeData } from '../model/nodes/BaseNode';
 import { SafeXmlNode } from '../parser/XmlParser';
 import type { RelEntry } from '../parser/RelParser';
 import type { ECharts } from 'echarts';
+import type { PdfjsConfig } from '../utils/pdfRenderer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +37,8 @@ export interface SlideRendererOptions {
   onNavigate?: (target: { slideIndex?: number; url?: string }) => void;
   /** Shared media URL cache for blob URL reuse across slides. */
   mediaUrlCache?: Map<string, string>;
+  /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. */
+  pdfjs?: PdfjsConfig;
   /** Shared set of live ECharts instances for explicit disposal. */
   chartInstances?: Set<ECharts>;
 }
@@ -216,7 +219,13 @@ export function renderSlide(
   const asyncTasks: Promise<void>[] = [];
 
   // Create render context (resolves slide -> layout -> master -> theme chain)
-  const ctx = createRenderContext(presentation, slide, options?.mediaUrlCache, chartInstances);
+  const ctx = createRenderContext(
+    presentation,
+    slide,
+    options?.mediaUrlCache,
+    chartInstances,
+    options?.pdfjs,
+  );
   ctx.asyncTasks = asyncTasks;
   if (options?.onNavigate) {
     ctx.onNavigate = options.onNavigate;

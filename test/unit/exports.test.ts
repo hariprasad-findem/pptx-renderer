@@ -29,6 +29,8 @@ import type {
   SerializedNode,
   SlideHandle,
   SlideRendererOptions,
+  PdfjsOptions,
+  PdfjsConfig,
   SlideData,
   SlideNode,
   ThemeData,
@@ -53,6 +55,9 @@ import type {
   ChartNodeData,
   PptxFiles,
 } from '../../src/index';
+
+type _PdfjsOptionsCompileCheck = PdfjsOptions;
+type _PdfjsConfigCompileCheck = PdfjsConfig;
 
 describe('package exports', () => {
   it('exports PptxViewer class', () => {
