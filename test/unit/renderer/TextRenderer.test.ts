@@ -245,9 +245,7 @@ describe('TextRenderer — renderTextBody', () => {
             runs: [
               {
                 text: 'Lenovo AI Cloud',
-                properties: xmlNode(
-                  '<rPr><solidFill><srgbClr val="FFFFFF"/></solidFill></rPr>',
-                ),
+                properties: xmlNode('<rPr><solidFill><srgbClr val="FFFFFF"/></solidFill></rPr>'),
               },
             ],
             level: 0,
@@ -418,6 +416,35 @@ describe('TextRenderer — renderTextBody', () => {
 
       expect(bulletSpan).toBeDefined();
       expect(bulletSpan!.style.fontSize).toBe('32pt');
+    });
+
+    it('resolves theme placeholders in bullet fonts instead of emitting raw +mj-lt', () => {
+      const body = makeTextBody({
+        listStyle: `
+          <lstStyle xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <lvl1pPr>
+              <buFont typeface="+mj-lt"/>
+              <buChar char="•"/>
+              <defRPr sz="1600"/>
+            </lvl1pPr>
+          </lstStyle>
+        `,
+        paragraphs: [
+          {
+            runs: [{ text: 'Themed bullet font' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bulletSpan = Array.from(container.querySelectorAll('span')).find((span) =>
+        span.textContent?.startsWith('•'),
+      ) as HTMLElement | undefined;
+
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.fontFamily).toContain('Calibri');
+      expect(bulletSpan!.style.fontFamily).not.toContain('+mj-lt');
     });
 
     it('applies percentage bullet size from buSzPct', () => {
@@ -746,6 +773,26 @@ describe('TextRenderer — renderTextBody', () => {
         expect(span.style.color).not.toBe('');
       }
     });
+
+    it('resolves theme placeholders passed from table text styles', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '表格主题字体' }],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.theme.minorFont = { latin: 'Calibri', ea: 'Microsoft YaHei', cs: '' };
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container, { cellTextFontFamily: '+mn-ea' });
+      const span = container.querySelector('span');
+
+      expect(span!.style.fontFamily).toContain('Microsoft YaHei');
+      expect(span!.style.fontFamily).not.toContain('+mn-ea');
+    });
   });
 
   describe('text alignment', () => {
@@ -863,6 +910,53 @@ describe('TextRenderer — renderTextBody', () => {
       const container = renderToContainer(body);
       const span = container.querySelector('span');
       expect(span!.style.fontFamily).toContain('Calibri');
+    });
+
+    it('falls back to theme latin font when +mn-ea points to an empty theme slot', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '主题中文字体',
+                properties: xmlNode('<rPr><ea typeface="+mn-ea"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      const span = container.querySelector('span');
+
+      expect(span!.style.fontFamily).toContain('Calibri');
+      expect(span!.style.fontFamily).not.toContain('+mn-ea');
+    });
+
+    it('resolves +mn-ea to the theme East Asian font when the slot exists', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '主题中文字体',
+                properties: xmlNode('<rPr><ea typeface="+mn-ea"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.theme.minorFont = { latin: 'Calibri', ea: 'Microsoft YaHei', cs: '' };
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      const span = container.querySelector('span');
+
+      expect(span!.style.fontFamily).toContain('Microsoft YaHei');
+      expect(span!.style.fontFamily).not.toContain('Calibri');
+      expect(span!.style.fontFamily).not.toContain('+mn-ea');
     });
 
     it('resolves +mj-lt to theme major font', () => {

@@ -8,6 +8,7 @@ import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { emuToPx } from '../parser/units';
 import { resolveColor, resolveLineStyle } from './StyleResolver';
+import { cssFontFamilyStack, resolveThemeFontStack } from './fontResolver';
 
 const MAX_CHART_CACHE_POINTS = 10_000;
 const EXPLICIT_FONT_SIZE = Symbol('pptxExplicitFontSize');
@@ -947,8 +948,9 @@ function extractDefRPrStyle(defRPr: SafeXmlNode, ctx: RenderContext): ChartTextS
   const latinTypeface = defRPr.child('latin').attr('typeface');
   const eaTypeface = defRPr.child('ea').attr('typeface');
   const csTypeface = defRPr.child('cs').attr('typeface');
-  if (latinTypeface || eaTypeface || csTypeface) {
-    style.fontFamily = latinTypeface || eaTypeface || csTypeface;
+  const fontStack = resolveThemeFontStack([latinTypeface, eaTypeface, csTypeface], ctx);
+  if (fontStack.length > 0) {
+    style.fontFamily = cssFontFamilyStack(fontStack);
   }
 
   return style.color ||
@@ -990,13 +992,16 @@ function extractTitleTextStyle(title: SafeXmlNode, ctx: RenderContext): ChartTex
 }
 
 function getChartThemeFontFamily(ctx: RenderContext): string | undefined {
-  return (
-    ctx.theme.minorFont.latin ||
-    ctx.theme.minorFont.ea ||
-    ctx.theme.majorFont.latin ||
-    ctx.theme.majorFont.ea ||
-    undefined
+  const fontStack = resolveThemeFontStack(
+    [
+      ctx.theme.minorFont.latin,
+      ctx.theme.minorFont.ea,
+      ctx.theme.majorFont.latin,
+      ctx.theme.majorFont.ea,
+    ],
+    ctx,
   );
+  return fontStack.length > 0 ? cssFontFamilyStack(fontStack) : undefined;
 }
 
 // ---------------------------------------------------------------------------

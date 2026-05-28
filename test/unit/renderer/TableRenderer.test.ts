@@ -1639,6 +1639,32 @@ describe('renderTable', () => {
       expect(span!.style.fontFamily).toContain('SimSun');
     });
 
+    it('tcTxStyle font keeps latin and East Asian typefaces in the cell text stack', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{FONT_STACK}">
+            <wholeTbl>
+              <tcTxStyle>
+                <font><latin typeface="Georgia"/><ea typeface="Microsoft YaHei"/></font>
+                <srgbClr val="000000"/>
+              </tcTxStyle>
+              <tcStyle><fill><solidFill><srgbClr val="EEEEEE"/></solidFill></fill></tcStyle>
+            </wholeTbl>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
+          textBody: { paragraphs: [{ runs: [{ text: '混排 Font' }], level: 0 }] } as any }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONT_STACK}' }), ctx);
+      const span = el.querySelector('span');
+      expect(span).not.toBeNull();
+      expect(span!.style.fontFamily).toContain('Georgia');
+      expect(span!.style.fontFamily).toContain('Microsoft YaHei');
+    });
+
     it('tcTxStyle fontRef idx="minor" applies theme minor font to cell text', () => {
       const ctx = makeCtxWithTableStyle(`
         <tblStyleLst>
@@ -1660,6 +1686,42 @@ describe('renderTable', () => {
       expect(span).not.toBeNull();
       // Theme minor font is 'Calibri' from makeCtx()
       expect(span!.style.fontFamily).toContain('Calibri');
+    });
+
+    it('tcTxStyle fontRef idx="minor" keeps the theme East Asian font in the stack', () => {
+      const ctx = makeCtx({
+        presentation: {
+          width: 960, height: 540, media: new Map(),
+          tableStyles: parseXml(`
+            <tblStyleLst>
+              <tblStyle styleId="{FONTREF_MINOR_STACK}">
+                <wholeTbl>
+                  <tcTxStyle><fontRef idx="minor"/><srgbClr val="000000"/></tcTxStyle>
+                  <tcStyle><fill><solidFill><srgbClr val="EEEEEE"/></solidFill></fill></tcStyle>
+                </wholeTbl>
+              </tblStyle>
+            </tblStyleLst>
+          `),
+        } as any,
+        theme: {
+          colorScheme: new Map([['dk1', '000000'], ['lt1', 'FFFFFF']]),
+          majorFont: { latin: 'Calibri', ea: '', cs: '' },
+          minorFont: { latin: 'Calibri', ea: 'Microsoft YaHei', cs: '' },
+          fillStyles: [],
+          lineStyles: [],
+          effectStyles: [],
+        },
+      });
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
+          textBody: { paragraphs: [{ runs: [{ text: '主题表格字体' }], level: 0 }] } as any }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MINOR_STACK}' }), ctx);
+      const span = el.querySelector('span');
+      expect(span).not.toBeNull();
+      expect(span!.style.fontFamily).toContain('Calibri');
+      expect(span!.style.fontFamily).toContain('Microsoft YaHei');
     });
 
     it('tcTxStyle fontRef idx="major" applies theme major font to cell text', () => {

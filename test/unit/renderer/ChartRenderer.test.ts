@@ -349,6 +349,58 @@ describe('ChartRenderer', () => {
       expect(legend?.textStyle?.fontSize).toBe(12);
     });
 
+    it('should resolve theme font placeholders from legend txPr defRPr', () => {
+      const legendTxPr = `
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+          <a:pPr>
+            <a:defRPr>
+              <a:latin typeface="+mn-lt"/>
+            </a:defRPr>
+          </a:pPr>
+        </a:p>`;
+      const ctx = createMockRenderContext({
+        theme: {
+          ...createMockRenderContext().theme,
+          minorFont: { latin: 'Mock Sans', ea: '', cs: '' },
+        },
+      });
+      const xml = buildChartSpaceXml({ hasLegend: true, legendPos: 'b', legendTxPr });
+      const { option } = parseChartOption(xml, ctx);
+      const legend = option.legend as any;
+
+      expect(legend?.textStyle?.fontFamily).toContain('Mock Sans');
+      expect(legend?.textStyle?.fontFamily).not.toContain('+mn-lt');
+    });
+
+    it('should keep East Asian theme fonts in explicit chart text font stacks', () => {
+      const legendTxPr = `
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+          <a:pPr>
+            <a:defRPr>
+              <a:latin typeface="+mn-lt"/>
+              <a:ea typeface="+mn-ea"/>
+            </a:defRPr>
+          </a:pPr>
+        </a:p>`;
+      const ctx = createMockRenderContext({
+        theme: {
+          ...createMockRenderContext().theme,
+          minorFont: { latin: 'Mock Sans', ea: 'Microsoft YaHei', cs: '' },
+        },
+      });
+      const xml = buildChartSpaceXml({ hasLegend: true, legendPos: 'b', legendTxPr });
+      const { option } = parseChartOption(xml, ctx);
+      const legend = option.legend as any;
+
+      expect(legend?.textStyle?.fontFamily).toContain('Mock Sans');
+      expect(legend?.textStyle?.fontFamily).toContain('Microsoft YaHei');
+      expect(legend?.textStyle?.fontFamily).not.toContain('+mn-');
+    });
+
     it('should apply legend manualLayout to legend left/top/width/height', () => {
       const xml = buildChartSpaceXml({
         hasLegend: true,
@@ -649,6 +701,8 @@ describe('ChartRenderer', () => {
         color: '#222222',
         fontSize: 12,
       });
+      expect(yAxis.nameTextStyle.fontFamily).toContain('Calibri');
+      expect(yAxis.nameTextStyle.fontFamily).not.toContain('+mn-lt');
     });
 
     it('should apply chart clrMapOvr when resolving axis txPr schemeClr', () => {
@@ -1916,11 +1970,11 @@ describe('ChartRenderer', () => {
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
 
-      expect(title?.textStyle?.fontFamily).toBe('Mock Sans');
+      expect(title?.textStyle?.fontFamily).toContain('Mock Sans');
       expect(title?.textStyle?.fontWeight).toBe('bold');
-      expect(legend?.textStyle?.fontFamily).toBe('Mock Sans');
-      expect(xAxis?.axisLabel?.fontFamily).toBe('Mock Sans');
-      expect(yAxis?.axisLabel?.fontFamily).toBe('Mock Sans');
+      expect(legend?.textStyle?.fontFamily).toContain('Mock Sans');
+      expect(xAxis?.axisLabel?.fontFamily).toContain('Mock Sans');
+      expect(yAxis?.axisLabel?.fontFamily).toContain('Mock Sans');
     });
 
     it('should parse areaChart with stacked grouping', () => {

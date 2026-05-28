@@ -52,6 +52,7 @@ import { SafeXmlNode } from '../parser/XmlParser';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalUrl } from '../utils/urlSafety';
 import { getEffectiveBodyPrChild } from './TextBodyProperties';
+import { cssFontFamilyStack, resolveThemeFontStack } from './fontResolver';
 
 function appendTransform(el: HTMLElement, transform: string): void {
   el.style.transform = `${el.style.transform || ''} ${transform}`.trim();
@@ -118,8 +119,14 @@ function renderWarpedTextBody(node: ShapeNodeData, ctx: RenderContext): SVGSVGEl
 
   const rPr = getFirstVisibleRunProperties(node.textBody);
   const fontSize = rPr?.numAttr('sz') !== undefined ? rPr.numAttr('sz')! / 100 : 12;
-  const fontFamily =
-    rPr?.child('latin').attr('typeface') || rPr?.child('ea').attr('typeface') || undefined;
+  const fontStack = resolveThemeFontStack(
+    [
+      rPr?.child('latin').attr('typeface'),
+      rPr?.child('ea').attr('typeface'),
+      rPr?.child('cs').attr('typeface'),
+    ],
+    ctx,
+  );
   const fontWeight = rPr?.attr('b') === '1' || rPr?.attr('b') === 'true' ? 'bold' : undefined;
   const solidFill = rPr?.child('solidFill');
   const fill = solidFill?.exists() ? resolveColorToCss(solidFill, ctx) : '#000000';
@@ -145,7 +152,7 @@ function renderWarpedTextBody(node: ShapeNodeData, ctx: RenderContext): SVGSVGEl
 
   const textEl = document.createElementNS(svgNs, 'text');
   textEl.setAttribute('font-size', `${fontSize}pt`);
-  if (fontFamily) textEl.setAttribute('font-family', fontFamily);
+  if (fontStack.length > 0) textEl.setAttribute('font-family', cssFontFamilyStack(fontStack));
   if (fontWeight) textEl.setAttribute('font-weight', fontWeight);
   textEl.setAttribute('fill', fill);
   textEl.setAttribute('dominant-baseline', 'middle');

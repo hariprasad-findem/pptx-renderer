@@ -17,6 +17,7 @@ import { emuToPx } from '../parser/units';
 import { hexToRgb } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { getPredefinedTableStyle } from './predefinedTableStyles';
+import { resolveThemeFontStack } from './fontResolver';
 
 function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
   if (
@@ -151,7 +152,7 @@ interface TableStyleTextProps {
   color?: string;
   bold?: boolean;
   italic?: boolean;
-  fontFamily?: string;
+  fontFamily?: string | string[];
 }
 
 /**
@@ -209,16 +210,25 @@ function getEffectiveTableStyleTextProps(
       const latin = font.child('latin').attr('typeface');
       const ea = font.child('ea').attr('typeface');
       const cs = font.child('cs').attr('typeface');
-      props.fontFamily = latin || ea || cs;
+      const fontStack = resolveThemeFontStack([latin, ea, cs], ctx);
+      if (fontStack.length > 0) props.fontFamily = fontStack;
     }
     if (!props.fontFamily) {
       const fontRef = tcTxStyle.child('fontRef');
       if (fontRef.exists()) {
         const idx = fontRef.attr('idx');
         if (idx === 'major') {
-          props.fontFamily = ctx.theme.majorFont.latin || ctx.theme.majorFont.ea;
+          const fontStack = resolveThemeFontStack(
+            [ctx.theme.majorFont.latin, ctx.theme.majorFont.ea, ctx.theme.majorFont.cs],
+            ctx,
+          );
+          if (fontStack.length > 0) props.fontFamily = fontStack;
         } else if (idx === 'minor') {
-          props.fontFamily = ctx.theme.minorFont.latin || ctx.theme.minorFont.ea;
+          const fontStack = resolveThemeFontStack(
+            [ctx.theme.minorFont.latin, ctx.theme.minorFont.ea, ctx.theme.minorFont.cs],
+            ctx,
+          );
+          if (fontStack.length > 0) props.fontFamily = fontStack;
         }
       }
     }

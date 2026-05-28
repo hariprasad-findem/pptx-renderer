@@ -1202,6 +1202,98 @@ describe('ShapeRenderer', () => {
     expect(htmlTextContainer).toBeUndefined();
   });
 
+  it('resolves theme font placeholders for supported prstTxWarp text', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="55" name="文本框 54"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="1773757" cy="307777"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square">
+            <a:prstTxWarp prst="textArchDown"><a:avLst/></a:prstTxWarp>
+            <a:spAutoFit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr algn="ctr"><a:buNone/></a:pPr>
+            <a:r>
+              <a:rPr sz="1200">
+                <a:latin typeface="+mj-ea"/>
+              </a:rPr>
+              <a:t>主题弧形文字</a:t>
+            </a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const ctx = createMockRenderContext();
+    ctx.theme.majorFont = { latin: 'Calibri', ea: 'Microsoft YaHei', cs: '' };
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const text = el.querySelector('text');
+
+    expect(text?.getAttribute('font-family')).toContain('Microsoft YaHei');
+    expect(text?.getAttribute('font-family')).not.toContain('+mj-ea');
+  });
+
+  it('keeps East Asian theme fonts in supported prstTxWarp font stacks', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="56" name="文本框 55"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="1773757" cy="307777"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square">
+            <a:prstTxWarp prst="textArchDown"><a:avLst/></a:prstTxWarp>
+            <a:spAutoFit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr algn="ctr"><a:buNone/></a:pPr>
+            <a:r>
+              <a:rPr sz="1200">
+                <a:latin typeface="+mj-lt"/>
+                <a:ea typeface="+mj-ea"/>
+              </a:rPr>
+              <a:t>主题弧形文字</a:t>
+            </a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const ctx = createMockRenderContext();
+    ctx.theme.majorFont = { latin: 'Aptos Display', ea: 'Microsoft YaHei', cs: '' };
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const text = el.querySelector('text');
+
+    expect(text?.getAttribute('font-family')).toContain('Aptos Display');
+    expect(text?.getAttribute('font-family')).toContain('Microsoft YaHei');
+    expect(text?.getAttribute('font-family')).not.toContain('+mj-');
+  });
+
   it('does not shrink wrapped spAutoFit text when Office single line spacing fits (ai-computing slide 28 footer)', () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
