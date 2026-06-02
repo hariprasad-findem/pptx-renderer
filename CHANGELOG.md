@@ -7,10 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-06-02
+
 ### Added
 
 - Added chart regression coverage for 100% stacked bars, stacked line/area charts, reversed axes, per-point pie labels, multi-ring doughnut charts, and chart color-style palettes.
 - Added `--testdata-source=windows|all` for pytest E2E runs so Windows-generated chart oracle cases can be exercised without changing test code.
+- Added configurable PDF.js fallback support via `pdfjs` options on `PptxViewer`, legacy `PptxRenderer`, and headless `renderSlide()`.
+- Added exported `PdfjsOptions` and `PdfjsConfig` types for consumers that need EMF-embedded PDF preview rendering.
+- Added `SlideHandle.ready` coverage for async slide resources such as EMF-PDF fallback previews.
+- Added repository `AGENTS.md` guidance for future agent-assisted maintenance.
 
 ### Changed
 
@@ -19,12 +25,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Doughnut charts with multiple series now render as concentric rings instead of dropping later series.
 - Implicit chart palettes now use chart color-style parts when related from the chart part.
 - Documentation now distinguishes chart 3D graceful fallbacks from true 3D chart fidelity.
+- PDF.js is no longer bundled into the core library output by default; consumers can provide `moduleUrl` and `workerUrl` only when they need EMF-PDF fallback rendering.
+- The local test and review pages now configure PDF.js explicitly for EMF-PDF preview rendering.
+- Documentation now clearly explains that ordinary PPTX rendering does not require PDF.js configuration and that full EMF/WMF vector rendering remains out of scope.
+- Rendering fidelity was refined across Office text layout, picture shape properties, chart line styles, table overrides, explicit strokes, theme fonts, and async media readiness.
 
 ### Fixed
 
 - Fixed reversed chart axes (`orientation="maxMin"`) being parsed but not applied.
 - Fixed chart axis lookup falling back to the first axis before checking all matching `axId` values.
 - Fixed pie charts ignoring per-point `c:dLbl` position, style, leader-line, and manual-layout overrides.
+- Fixed line, scatter, and combo chart cases that could drop later plot-area series or lose OOXML smoothing/line semantics.
+- Fixed picture shape properties such as fills, outlines, shadows, and related rendering details being ignored for pictures.
+- Fixed text sizing, wrapping, bullet colors, vertical labels, hyperlink colors, and theme-font inheritance mismatches seen in real-world decks.
+- Fixed EMF-embedded PDF fallback icons not appearing in screenshot/export flows when PDF.js worker URLs were not isolated correctly.
+- Fixed async EMF-PDF fallback rendering so callers can await `SlideHandle.ready` before visual capture.
+- Fixed explicit shape lines without a width so Office's visible default stroke width is preserved.
+- Fixed chart legend, tooltip, data-label, and axis label sizing/positioning regressions across Oracle and real-world decks.
 
 ## [1.0.3] - 2026-05-26
 

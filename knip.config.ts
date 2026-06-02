@@ -3,7 +3,7 @@ import type { KnipConfig } from 'knip';
 const config: KnipConfig = {
   entry: ['src/index.ts'],
   project: ['src/**/*.ts'],
-  ignoreDependencies: ['pdfjs-dist', 'pixelmatch', 'pngjs'],
+  ignoreDependencies: ['pixelmatch', 'pngjs'],
   // Keep this allow-list narrow so Knip still reports new accidental type exports.
   ignoreIssues: {
     'src/core/Renderer.ts': ['types'],

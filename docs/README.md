@@ -11,6 +11,7 @@
 - [Contributing](CONTRIBUTING.md) — PR checklist, code style, test requirements
 - [Security](SECURITY.md) — ZIP parse limits, URL filtering, vulnerability reporting
 - [Releasing](RELEASING.md) — Release checklist and versioning
+- [v1.0.4 Release Notes](releases/v1.0.4.md) — Summary, migration notes, and release checklist
 
 ## Community
 
