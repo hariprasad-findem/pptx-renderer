@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -6,8 +6,18 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const demoPath = resolve(__dirname, '../../../demo/index.html');
 const devPagePath = resolve(__dirname, '../../pages/index.html');
+const demoViteConfigPath = resolve(__dirname, '../../../vite.config.demo.ts');
+const docsExampleSamplePath = resolve(
+  __dirname,
+  '../../../docs/example/1-chart-and-complex/source.pptx',
+);
+const duplicatePublicSamplePath = resolve(
+  __dirname,
+  '../../../demo/public/samples/chart-and-complex.pptx',
+);
 const demoHtml = readFileSync(demoPath, 'utf-8');
 const devHtml = readFileSync(devPagePath, 'utf-8');
+const demoViteConfig = readFileSync(demoViteConfigPath, 'utf-8');
 
 const pages = [
   ['public demo', demoHtml],
@@ -69,5 +79,23 @@ describe('public demo feature surface', () => {
       expect(html, label).not.toContain('function clearSearchHighlight');
       expect(html, label).not.toContain('textContent.replace');
     }
+  });
+
+  it('serves the public demo sample from the docs example source deck', () => {
+    expect(existsSync(docsExampleSamplePath)).toBe(true);
+    expect(existsSync(duplicatePublicSamplePath)).toBe(false);
+    expect(demoHtml).toContain('data-file="samples/chart-and-complex.pptx"');
+    expect(demoViteConfig).toContain('docs/example/1-chart-and-complex/source.pptx');
+    expect(demoViteConfig).toContain('fileName: samplePublicFile');
+    expect(demoViteConfig).toContain('publicDir: false');
+  });
+
+  it('keeps the public demo empty state visually anchored', () => {
+    const previewCss = demoHtml.match(/\.empty-slide-preview\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(demoHtml).toContain('empty-slide-preview');
+    expect(demoHtml).toContain('empty-feature-icon');
+    expect(demoHtml).toContain('Open a deck or launch the sample');
+    expect(previewCss).toContain('width: 100%;');
   });
 });
