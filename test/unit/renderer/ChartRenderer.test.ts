@@ -1923,8 +1923,9 @@ describe('ChartRenderer', () => {
           icon: expect.stringMatching(/^path:\/\//),
         }),
       );
+      expect(option.title).toBeUndefined();
       expect(grid?.left).toBe(24);
-      expect(grid?.top).toBe(52);
+      expect(grid?.top).toBe(20);
       expect(grid?.bottom).toBe(20);
       expect(xAxis?.max).toBe(3);
       expect(xAxis?.interval).toBe(1);
@@ -5111,6 +5112,97 @@ describe('ChartRenderer', () => {
       expect(series.showSymbol).toBe(true);
       expect(series.symbol).toBe('diamond');
       expect(series.symbolSize).toBe(5);
+    });
+
+    it('does not infer a scatter chart title when autoTitleDeleted is omitted (oracle-pypptx-chart-0017)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:scatterChart>
+              <c:scatterStyle val="smoothMarker"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Curve</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:xVal><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>1</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                <c:yVal><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>5</c:v></c:pt><c:pt idx="1"><c:v>6</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:scatterChart>
+            <c:valAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:valAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+          <c:legend><c:legendPos val="r"/></c:legend>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      expect(option.title).toBeUndefined();
+    });
+
+    it('keeps scatter value axes from clipping data that nearly reaches a nice maximum (oracle-pypptx-chart-0017)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:scatterChart>
+              <c:scatterStyle val="smoothMarker"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Curve</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:xVal><c:numRef><c:numCache><c:ptCount val="20"/><c:pt idx="0"><c:v>0.0</c:v></c:pt><c:pt idx="1"><c:v>0.5</c:v></c:pt><c:pt idx="2"><c:v>1.0</c:v></c:pt><c:pt idx="3"><c:v>1.5</c:v></c:pt><c:pt idx="4"><c:v>2.0</c:v></c:pt><c:pt idx="5"><c:v>2.5</c:v></c:pt><c:pt idx="6"><c:v>3.0</c:v></c:pt><c:pt idx="7"><c:v>3.5</c:v></c:pt><c:pt idx="8"><c:v>4.0</c:v></c:pt><c:pt idx="9"><c:v>4.5</c:v></c:pt><c:pt idx="10"><c:v>5.0</c:v></c:pt><c:pt idx="11"><c:v>5.5</c:v></c:pt><c:pt idx="12"><c:v>6.0</c:v></c:pt><c:pt idx="13"><c:v>6.5</c:v></c:pt><c:pt idx="14"><c:v>7.0</c:v></c:pt><c:pt idx="15"><c:v>7.5</c:v></c:pt><c:pt idx="16"><c:v>8.0</c:v></c:pt><c:pt idx="17"><c:v>8.5</c:v></c:pt><c:pt idx="18"><c:v>9.0</c:v></c:pt><c:pt idx="19"><c:v>9.5</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                <c:yVal><c:numRef><c:numCache><c:ptCount val="20"/><c:pt idx="0"><c:v>5.0</c:v></c:pt><c:pt idx="1"><c:v>6.438276615812609</c:v></c:pt><c:pt idx="2"><c:v>7.524412954423689</c:v></c:pt><c:pt idx="3"><c:v>7.992484959812163</c:v></c:pt><c:pt idx="4"><c:v>7.727892280477045</c:v></c:pt><c:pt idx="5"><c:v>6.795416432311869</c:v></c:pt><c:pt idx="6"><c:v>5.423360024179601</c:v></c:pt><c:pt idx="7"><c:v>3.9476503169311403</c:v></c:pt><c:pt idx="8"><c:v>2.7295925140762156</c:v></c:pt><c:pt idx="9"><c:v>2.067409647004709</c:v></c:pt><c:pt idx="10"><c:v>2.1232271760105847</c:v></c:pt><c:pt idx="11"><c:v>2.8833790232888243</c:v></c:pt><c:pt idx="12"><c:v>4.161753505403222</c:v></c:pt><c:pt idx="13"><c:v>5.645359964263447</c:v></c:pt><c:pt idx="14"><c:v>6.970959796156367</c:v></c:pt><c:pt idx="15"><c:v>7.813999930324217</c:v></c:pt><c:pt idx="16"><c:v>7.968074739870145</c:v></c:pt><c:pt idx="17"><c:v>7.39546133787047</c:v></c:pt><c:pt idx="18"><c:v>6.23635545572527</c:v></c:pt><c:pt idx="19"><c:v>4.774546638614572</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:scatterChart>
+            <c:valAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+          <c:legend><c:legendPos val="r"/></c:legend>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = option.xAxis as any;
+      const yAxis = option.yAxis as any;
+      expect(xAxis.max).toBe(10);
+      expect(yAxis.interval).toBe(1);
+      expect(yAxis.max).toBe(9);
+    });
+
+    it('lets series smooth=0 override scatterStyle smoothMarker interpolation (oracle-pypptx-chart-0017)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:scatterChart>
+              <c:scatterStyle val="smoothMarker"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Curve</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:xVal><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>1</c:v></c:pt><c:pt idx="2"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                <c:yVal><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>5</c:v></c:pt><c:pt idx="1"><c:v>8</c:v></c:pt><c:pt idx="2"><c:v>6</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:scatterChart>
+            <c:valAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+      expect(series.type).toBe('line');
+      expect(series.data).toEqual([
+        [0, 5],
+        [1, 8],
+        [2, 6],
+      ]);
     });
 
     it('sizes filled radar charts like PowerPoint and uses stronger area fill (oracle-pypptx-chart-0019)', () => {

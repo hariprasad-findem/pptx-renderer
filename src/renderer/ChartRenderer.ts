@@ -843,7 +843,8 @@ function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): SeriesData
     const marker = ser.child('marker');
     const markerSymbol = marker.child('symbol').attr('val');
     const markerSize = marker.child('size').numAttr('val');
-    const smooth = parseOoxmlBoolElement(ser.child('smooth'));
+    const smoothNode = ser.child('smooth');
+    const smooth = smoothNode.exists() ? parseOoxmlBoolElement(smoothNode) : undefined;
 
     seriesArr.push({
       name,
@@ -919,10 +920,15 @@ function extractChartTitle(chartNode: SafeXmlNode, seriesArr?: SeriesData[]): st
 
   const title = chartNode.child('title');
   if (!title.exists()) {
-    // OOXML spec: when autoTitleDeleted is NOT "1" and there is no explicit
-    // <c:title>, the chart auto-generates a title from the first series name.
-    // This applies mainly to single-series charts like pie/doughnut.
-    if (seriesArr && seriesArr.length === 1 && seriesArr[0].name) {
+    // Some producers omit autoTitleDeleted entirely for no-title charts.
+    // Only synthesize the Office auto-title when the XML explicitly requests it.
+    if (
+      autoTitleDeleted.exists() &&
+      autoTitleDeleted.attr('val') === '0' &&
+      seriesArr &&
+      seriesArr.length === 1 &&
+      seriesArr[0].name
+    ) {
       return seriesArr[0].name;
     }
     return undefined;
@@ -2683,7 +2689,8 @@ function buildScatterChartOption(
     const showSymbol = !scatterStyleHidesMarkers && echartsSymbol !== 'none';
     const renderAsLine = scatterStyleDrawsLine || s.smooth;
     if (renderAsLine) {
-      const lineData = scatterStyleIsSmooth || s.smooth ? buildSmoothScatterLineData(data) : data;
+      const shouldInterpolate = s.smooth ?? scatterStyleIsSmooth;
+      const lineData = shouldInterpolate ? buildSmoothScatterLineData(data) : data;
       const lineWidth = s.lineWidth ?? 4;
       return {
         type: 'line' as const,
@@ -3609,7 +3616,11 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
     const dataMax = Math.max(...values);
     const interval = niceAxisInterval(dataMax, dataMin, desiredTicks);
     if (axis.max === undefined) {
-      axis.max = niceAxisMax(dataMax, dataMin, desiredTicks);
+      let max = niceAxisMax(dataMax, dataMin, desiredTicks);
+      if (max > dataMax && max - dataMax < interval * 0.05) {
+        max += interval;
+      }
+      axis.max = max;
     }
     if (axis.min === undefined && dataMin >= 0) {
       axis.min = 0;
@@ -3623,7 +3634,7 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
     const xAxes = (Array.isArray(opt.xAxis) ? opt.xAxis : [opt.xAxis]) as Record<string, unknown>[];
     const yAxes = (Array.isArray(opt.yAxis) ? opt.yAxis : [opt.yAxis]) as Record<string, unknown>[];
     xAxes.forEach((ax) => applyAxisExtent(ax, xValues, 3));
-    yAxes.forEach((ax) => applyAxisExtent(ax, yValues, 7));
+    yAxes.forEach((ax) => applyAxisExtent(ax, yValues, 8));
     return;
   }
 
