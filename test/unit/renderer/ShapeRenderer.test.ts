@@ -2168,7 +2168,46 @@ describe('ShapeRenderer', () => {
       },
     });
     const el = renderShape(shapeNode, ctx);
-    expect(el.style.boxShadow || el.style.filter).toBeTruthy();
+    expect(el.style.boxShadow || el.style.filter || el.querySelector('path[filter]')).toBeTruthy();
+  });
+
+  it('applies unscaled outer shadows to non-line SVG paths instead of wrapper CSS filters (oracle-pypptx-shape-adj-0009)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="402" name="Donut Shadow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="donut"><a:avLst><a:gd name="adj" fmla="val 10000"/></a:avLst></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4F81BD"/></a:solidFill>
+        </p:spPr>
+        <p:style><a:effectRef idx="1"><a:schemeClr val="accent1"/></a:effectRef></p:style>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const effectStyleXml = parseXml(`
+      <a:effectStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <a:effectLst>
+          <a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0">
+            <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+          </a:outerShdw>
+        </a:effectLst>
+      </a:effectStyle>
+    `);
+    const ctx = createMockRenderContext({
+      theme: {
+        ...createMockRenderContext().theme,
+        effectStyles: [effectStyleXml],
+      },
+    });
+
+    const el = renderShape(shapeNode, ctx);
+    const path = el.querySelector('path');
+
+    expect(el.style.filter).toBe('');
+    expect(path?.getAttribute('filter')).toContain('url(#shape-shadow-');
+    expect(el.innerHTML).toContain('<filter');
+    expect(el.innerHTML).toContain('stdDeviation="2.10"');
   });
 
   it('renders rect shape with solidFill color', () => {
@@ -3832,7 +3871,7 @@ describe('ShapeRenderer', () => {
 
     const el = renderShape(shapeNode, ctx);
     // A shadow must be applied (from the explicit effectLst)
-    expect(el.style.boxShadow || el.style.filter).toBeTruthy();
+    expect(el.style.boxShadow || el.style.filter || el.querySelector('path[filter]')).toBeTruthy();
   });
 
   // ---------------------------------------------------------------------------

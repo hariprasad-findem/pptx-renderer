@@ -282,6 +282,9 @@ function applySvgDropShadowFilter(
   dropShadow.setAttribute('flood-opacity', shadow.opacity.toFixed(4));
   filter.appendChild(dropShadow);
   defs.appendChild(filter);
+  if (!defs.parentNode && target.ownerSVGElement) {
+    target.ownerSVGElement.insertBefore(defs, target.ownerSVGElement.firstChild);
+  }
   target.setAttribute('filter', `url(#${filterId})`);
 }
 
@@ -2033,7 +2036,17 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           }
         }
       } else {
-        wrapper.style.filter = `drop-shadow(${offsetX.toFixed(1)}px ${offsetY.toFixed(1)}px ${blurPx.toFixed(1)}px ${shadowColor})`;
+        if (!isLineLike && mainSvgNs && mainDefs && mainPath && mainSvgBounds) {
+          applySvgDropShadowFilter(mainSvgNs, mainDefs, mainPath, mainSvgBounds, {
+            dx: offsetX,
+            dy: offsetY,
+            blur: blurPx,
+            color: shadowRgb,
+            opacity: shdAlpha,
+          });
+        } else {
+          wrapper.style.filter = `drop-shadow(${offsetX.toFixed(1)}px ${offsetY.toFixed(1)}px ${blurPx.toFixed(1)}px ${shadowColor})`;
+        }
       }
     }
 
