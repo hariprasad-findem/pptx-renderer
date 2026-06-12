@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  applyZeroCrossingAxisLabelLayout,
   parseChartXml,
   renderChart,
   type ParseChartResult,
@@ -4926,6 +4927,118 @@ describe('ChartRenderer', () => {
         show: true,
         lineStyle: { color: '#000000' },
       });
+    });
+
+    it('varies single-series bar colors by point and inverts negative values by default (oracle-pypptx-chart-0002)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="0"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Profit/Loss</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="6"/><c:pt idx="0"><c:v>Jan</c:v></c:pt><c:pt idx="1"><c:v>Feb</c:v></c:pt><c:pt idx="2"><c:v>Mar</c:v></c:pt><c:pt idx="3"><c:v>Apr</c:v></c:pt><c:pt idx="4"><c:v>May</c:v></c:pt><c:pt idx="5"><c:v>Jun</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="6"/><c:pt idx="0"><c:v>15</c:v></c:pt><c:pt idx="1"><c:v>-8</c:v></c:pt><c:pt idx="2"><c:v>22</c:v></c:pt><c:pt idx="3"><c:v>-12</c:v></c:pt><c:pt idx="4"><c:v>5</c:v></c:pt><c:pt idx="5"><c:v>-3</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+      expect(series.itemStyle).toBeUndefined();
+      expect(series.data[0]).toMatchObject({
+        value: 15,
+        itemStyle: { color: '#4472C4' },
+      });
+      expect(series.data[1]).toMatchObject({
+        value: -8,
+        itemStyle: { color: '#FFFFFF', borderColor: '#000000', borderWidth: 1 },
+      });
+      expect(series.data[2]).toMatchObject({
+        value: 22,
+        itemStyle: { color: '#A5A5A5' },
+      });
+      const yAxis = option.yAxis as any;
+      expect(yAxis.min).toBe(-15);
+      expect(yAxis.max).toBe(25);
+      expect(yAxis.interval).toBe(5);
+    });
+
+    it('places category axis labels on the value-axis zero crossing when crosses=autoZero (oracle-pypptx-chart-0002)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Profit/Loss</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>Gain</c:v></c:pt><c:pt idx="1"><c:v>Loss</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>15</c:v></c:pt><c:pt idx="1"><c:v>-8</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx>
+              <c:axId val="1"/>
+              <c:delete val="0"/>
+              <c:axPos val="b"/>
+              <c:tickLblPos val="nextTo"/>
+              <c:crossAx val="2"/>
+              <c:crosses val="autoZero"/>
+            </c:catAx>
+            <c:valAx>
+              <c:axId val="2"/>
+              <c:scaling/>
+              <c:delete val="0"/>
+              <c:axPos val="l"/>
+              <c:majorGridlines/>
+              <c:crossAx val="1"/>
+              <c:crosses val="autoZero"/>
+            </c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = option.xAxis as any;
+      expect(xAxis.axisLine).toMatchObject({ onZero: true });
+    });
+
+    it('offsets zero-crossing category labels from the chart height so negative bars do not push labels to the bottom', () => {
+      const option: any = {
+        grid: { top: 20, bottom: 8 },
+        xAxis: {
+          type: 'category',
+          axisLine: { onZero: true, lineStyle: { color: '#000000' } },
+          axisLabel: { interval: 0, fontSize: 10 },
+        },
+        yAxis: {
+          type: 'value',
+          min: -15,
+          max: 25,
+        },
+        series: [{ type: 'bar', data: [15, -8] }],
+      };
+
+      applyZeroCrossingAxisLabelLayout(option, { w: 400, h: 300 });
+
+      expect(option.xAxis.axisLabel.margin).toBe(-86);
+      expect(option.xAxis.z).toBeGreaterThan(10);
+      expect(option.grid.containLabel).toBe(false);
+      expect(option.grid.left).toBeGreaterThanOrEqual(48);
     });
 
     it('applies major gridline line style from value axis spPr', () => {

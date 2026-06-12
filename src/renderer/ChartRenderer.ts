@@ -28,6 +28,7 @@ interface SeriesData {
   dataPointColors?: (string | undefined)[]; // per-point colors (for pie charts)
   dataPointStyles?: (DataPointStyle | undefined)[]; // per-point fill and border styles
   formatCode?: string; // numCache formatCode (e.g. "0%", "0.0%", "General")
+  invertIfNegative?: boolean; // c:invertIfNegative, defaults are chart-type dependent
   markerSymbol?: string; // OOXML c:marker > c:symbol val
   markerSize?: number; // OOXML c:marker > c:size val (points)
   smooth?: boolean; // OOXML c:smooth val for scatter/line-like charts
@@ -48,6 +49,7 @@ const DEFAULT_MAJOR_GRIDLINE_STYLE: Required<ChartLineStyle> = {
   width: 1,
   type: 'solid',
 };
+const CHART_ACCENT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
 
 interface DataPointStyle {
   color?: string;
@@ -60,6 +62,7 @@ interface DataPointStyle {
 interface AxisInfo {
   deleted: boolean;
   tickLblPos: string; // 'nextTo' | 'none' | 'high' | 'low'
+  crosses?: string; // 'autoZero' | 'min' | 'max'
   numFmt?: string; // formatCode from axis numFmt
   min?: number;
   max?: number;
@@ -123,9 +126,12 @@ interface MutableAxisOption {
   min?: number;
   max?: number;
   interval?: number;
+  z?: number;
+  axisLine?: Record<string, unknown>;
   axisLabel?: {
     fontSize?: number;
     fontFamily?: string;
+    margin?: number;
   };
 }
 
@@ -828,6 +834,10 @@ function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): SeriesData
     const lineWidth = extractSeriesLineWidth(ser);
     const dataPointStyles = extractDataPointStyles(ser, ctx);
     const dataPointColors = dataPointStyles?.map((style) => style?.color);
+    const invertIfNegativeNode = ser.child('invertIfNegative');
+    const invertIfNegative = invertIfNegativeNode.exists()
+      ? parseOoxmlBoolElement(invertIfNegativeNode)
+      : undefined;
 
     // Extract marker info (c:marker > c:symbol, c:size)
     const marker = ser.child('marker');
@@ -846,6 +856,7 @@ function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): SeriesData
       dataPointColors,
       dataPointStyles,
       formatCode,
+      invertIfNegative,
       markerSymbol,
       markerSize,
       smooth,
@@ -1448,6 +1459,7 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   if (!ax.exists()) return { ...DEFAULT_AXIS_INFO };
   const deleted = ax.child('delete').attr('val') === '1';
   const tickLblPos = ax.child('tickLblPos').attr('val') || 'nextTo';
+  const crosses = ax.child('crosses').attr('val');
   const numFmtNode = ax.child('numFmt');
   const numFmt = numFmtNode.exists() ? numFmtNode.attr('formatCode') || undefined : undefined;
   const scaling = ax.child('scaling');
@@ -1466,6 +1478,7 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   return {
     deleted,
     tickLblPos,
+    crosses,
     numFmt: numFmt && numFmt !== 'General' ? numFmt : undefined,
     min: min !== undefined && !isNaN(min) ? min : undefined,
     max: max !== undefined && !isNaN(max) ? max : undefined,
@@ -1573,6 +1586,11 @@ function applyAxisInfo(
 
   if (info.orientation === 'maxMin') {
     axisDef.inverse = true;
+  }
+
+  if (info.crosses === 'autoZero') {
+    const existingLine = (axisDef.axisLine as Record<string, unknown>) || {};
+    axisDef.axisLine = { ...existingLine, onZero: true };
   }
 
   if (info.title) {
@@ -1952,6 +1970,17 @@ function buildBarChartOption(
   const percentStackedValues = isPercentStacked
     ? normalizePercentStackedValues(seriesArr)
     : undefined;
+  const varyColorsNode = chartTypeNode.child('varyColors');
+  const defaultVaryColors =
+    seriesArr.length === 1 &&
+    seriesArr[0].values.length > 1 &&
+    !isStacked &&
+    !isPercentStacked &&
+    !seriesArr[0].colorHex;
+  const varyColors = varyColorsNode.exists()
+    ? parseOoxmlBoolElement(varyColorsNode)
+    : defaultVaryColors;
+  const pointPalette = getThemeAccentPalette(ctx);
 
   // Parse data labels: in OOXML they can be on chart type (barChart) or on series (ser); try both
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
@@ -2002,27 +2031,49 @@ function buildBarChartOption(
     const seriesValues = percentStackedValues?.[idx] ?? s.values;
     const data: echarts.BarSeriesOption['data'] = seriesValues.map((v, pointIdx) => {
       const ov = pointOverrides.get(pointIdx);
-      if (!ov) return v;
-      const merged: DataLabelConfig = {
-        showVal: perSeriesLabels?.showVal ?? false,
-        showCatName: perSeriesLabels?.showCatName ?? false,
-        showSerName: perSeriesLabels?.showSerName ?? false,
-        showPercent: perSeriesLabels?.showPercent ?? false,
-        position: perSeriesLabels?.position,
-        showLeaderLines: perSeriesLabels?.showLeaderLines,
-        manualLayout: perSeriesLabels?.manualLayout,
-        color: perSeriesLabels?.color,
-        fontSize: perSeriesLabels?.fontSize,
-        bold: perSeriesLabels?.bold,
-        backgroundColor: perSeriesLabels?.backgroundColor,
-        borderColor: perSeriesLabels?.borderColor,
-        borderWidth: perSeriesLabels?.borderWidth,
-        padding: perSeriesLabels?.padding,
-        ...ov,
-      };
+      const rawValue = s.values[pointIdx] ?? v;
+      const pointStyle = s.dataPointStyles?.[pointIdx];
+      let itemStyle: Record<string, unknown> | undefined;
+      if (pointStyle) {
+        itemStyle = {
+          ...(pointStyle.color ? { color: pointStyle.color } : {}),
+          ...(pointStyle.borderColor ? { borderColor: pointStyle.borderColor } : {}),
+          ...(pointStyle.borderWidth !== undefined ? { borderWidth: pointStyle.borderWidth } : {}),
+          ...(pointStyle.borderType ? { borderType: pointStyle.borderType } : {}),
+        };
+      } else if (s.invertIfNegative !== false && rawValue < 0) {
+        itemStyle = { color: '#FFFFFF', borderColor: '#000000', borderWidth: 1 };
+      } else if (varyColors && !s.colorHex && pointPalette.length > 0) {
+        itemStyle = { color: pointPalette[pointIdx % pointPalette.length] };
+      }
+
+      let pointLabel: echarts.BarSeriesOption['label'];
+      if (ov) {
+        const merged: DataLabelConfig = {
+          showVal: perSeriesLabels?.showVal ?? false,
+          showCatName: perSeriesLabels?.showCatName ?? false,
+          showSerName: perSeriesLabels?.showSerName ?? false,
+          showPercent: perSeriesLabels?.showPercent ?? false,
+          position: perSeriesLabels?.position,
+          showLeaderLines: perSeriesLabels?.showLeaderLines,
+          manualLayout: perSeriesLabels?.manualLayout,
+          color: perSeriesLabels?.color,
+          fontSize: perSeriesLabels?.fontSize,
+          bold: perSeriesLabels?.bold,
+          backgroundColor: perSeriesLabels?.backgroundColor,
+          borderColor: perSeriesLabels?.borderColor,
+          borderWidth: perSeriesLabels?.borderWidth,
+          padding: perSeriesLabels?.padding,
+          ...ov,
+        };
+        pointLabel = buildLabel(merged);
+      }
+
+      if (!itemStyle && !pointLabel) return v;
       return {
         value: v,
-        label: buildLabel(merged),
+        ...(itemStyle ? { itemStyle } : {}),
+        ...(pointLabel ? { label: pointLabel } : {}),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     });
@@ -3276,6 +3327,12 @@ function parseChartColorStylePalette(
   return colors;
 }
 
+function getThemeAccentPalette(ctx: RenderContext): string[] {
+  return CHART_ACCENT_KEYS.map((k) => ctx.theme.colorScheme.get(k))
+    .filter((v): v is string => !!v)
+    .map((hex) => (hex.startsWith('#') ? hex : `#${hex}`));
+}
+
 function buildChartPalette(
   chartXml: SafeXmlNode,
   ctx: RenderContext,
@@ -3289,10 +3346,7 @@ function buildChartPalette(
     if (chartColorStylePalette.length > 0) return chartColorStylePalette;
   }
 
-  const accents = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
-    .map((k) => ctx.theme.colorScheme.get(k))
-    .filter((v): v is string => !!v)
-    .map((hex) => (hex.startsWith('#') ? hex : `#${hex}`));
+  const accents = getThemeAccentPalette(ctx);
 
   if (accents.length === 0) return undefined;
 
@@ -3588,6 +3642,8 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
       // Set min to 0 when all values are non-negative and no explicit min
       if (ax.min === undefined && dataMin >= 0) {
         ax.min = 0;
+      } else if (ax.min === undefined && dataMin < 0) {
+        ax.min = niceAxisMin(dataMax, dataMin, desiredTicks);
       }
       if (ax.interval === undefined) {
         ax.interval = interval;
@@ -3608,6 +3664,12 @@ function niceAxisMax(dataMax: number, dataMin: number, desiredTicks = 5): number
   const niceInterval = niceAxisInterval(dataMax, dataMin, desiredTicks);
   const niceMax = Math.ceil(dataMax / niceInterval) * niceInterval;
   return niceMax <= dataMax ? niceMax + niceInterval : niceMax;
+}
+
+function niceAxisMin(dataMax: number, dataMin: number, desiredTicks = 5): number {
+  const niceInterval = niceAxisInterval(dataMax, dataMin, desiredTicks);
+  const niceMin = Math.floor(dataMin / niceInterval) * niceInterval;
+  return niceMin >= dataMin ? niceMin - niceInterval : niceMin;
 }
 
 function niceAxisInterval(dataMax: number, dataMin: number, desiredTicks = 5): number {
@@ -4008,6 +4070,92 @@ function normalizeOptionArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+function gridEdgePx(value: unknown, fullSize: number, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    if (value.endsWith('%')) {
+      const pct = parseFloat(value);
+      return Number.isFinite(pct) ? (fullSize * pct) / 100 : fallback;
+    }
+    const px = parseFloat(value);
+    return Number.isFinite(px) ? px : fallback;
+  }
+  return fallback;
+}
+
+function plotSpanPx(
+  grid: Record<string, unknown> | undefined,
+  fullSize: number,
+  startKey: 'top' | 'left',
+  endKey: 'bottom' | 'right',
+): number {
+  if (typeof grid?.width === 'string' && startKey === 'left' && grid.width.endsWith('%')) {
+    return (fullSize * parseFloat(grid.width)) / 100;
+  }
+  if (typeof grid?.height === 'string' && startKey === 'top' && grid.height.endsWith('%')) {
+    return (fullSize * parseFloat(grid.height)) / 100;
+  }
+  if (typeof grid?.width === 'number' && startKey === 'left') return grid.width;
+  if (typeof grid?.height === 'number' && startKey === 'top') return grid.height;
+
+  const start = gridEdgePx(grid?.[startKey], fullSize, 0);
+  const end = gridEdgePx(grid?.[endKey], fullSize, 0);
+  return Math.max(0, fullSize - start - end);
+}
+
+function axisCrossesZero(axis: MutableAxisOption): boolean {
+  return (
+    typeof axis.min === 'number' && typeof axis.max === 'number' && axis.min < 0 && axis.max > 0
+  );
+}
+
+function applyCategoryLabelZeroOffset(
+  categoryAxis: MutableAxisOption,
+  valueAxis: MutableAxisOption | undefined,
+  plotSpan: number,
+): boolean {
+  if (!valueAxis || categoryAxis.type !== 'category' || valueAxis.type !== 'value') return false;
+  if (categoryAxis.axisLine?.onZero !== true || !axisCrossesZero(valueAxis)) return false;
+  if (plotSpan <= 0) return false;
+
+  const zeroOffsetFromMin = plotSpan * ((0 - valueAxis.min!) / (valueAxis.max! - valueAxis.min!));
+  const axisLabel = categoryAxis.axisLabel ?? (categoryAxis.axisLabel = {});
+  const labelGap = (axisLabel.fontSize ?? 10) + 6;
+  axisLabel.margin = -Math.round(Math.max(0, zeroOffsetFromMin - labelGap));
+  categoryAxis.z = Math.max(categoryAxis.z ?? 0, 20);
+  return true;
+}
+
+export function applyZeroCrossingAxisLabelLayout(
+  option: echarts.EChartsOption,
+  chartSize: { w: number; h: number },
+): void {
+  const grid = normalizeOptionArray<Record<string, unknown>>(
+    option.grid as Record<string, unknown> | Record<string, unknown>[] | undefined,
+  )[0];
+  const xAxes = normalizeOptionArray<MutableAxisOption>(
+    option.xAxis as MutableAxisOption | MutableAxisOption[],
+  );
+  const yAxes = normalizeOptionArray<MutableAxisOption>(
+    option.yAxis as MutableAxisOption | MutableAxisOption[],
+  );
+  const gridHeight = plotSpanPx(grid, chartSize.h, 'top', 'bottom');
+  const gridWidth = plotSpanPx(grid, chartSize.w, 'left', 'right');
+  let applied = false;
+
+  xAxes.forEach((xAxis, index) => {
+    applied = applyCategoryLabelZeroOffset(xAxis, yAxes[index] ?? yAxes[0], gridHeight) || applied;
+  });
+  yAxes.forEach((yAxis, index) => {
+    applied = applyCategoryLabelZeroOffset(yAxis, xAxes[index] ?? xAxes[0], gridWidth) || applied;
+  });
+
+  if (applied && grid) {
+    grid.containLabel = false;
+    grid.left = Math.max(gridEdgePx(grid.left, chartSize.w, 0), 48);
+  }
+}
+
 function getValueAxisId(chartTypeNode: SafeXmlNode): string | undefined {
   return getChartAxisIds(chartTypeNode)[1];
 }
@@ -4227,6 +4375,7 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   const chartTheme = ctx.presentation.chartThemes?.get(node.chartPath);
   const chartCtx = chartTheme ? { ...ctx, theme: chartTheme, colorCache: new Map() } : ctx;
   const { option, dataTable, chartFrameStyle } = parseChartXml(chartXml, chartCtx, node.chartPath);
+  applyZeroCrossingAxisLabelLayout(option, node.size);
   if (chartFrameStyle) {
     wrapper.style.boxSizing = 'border-box';
     if (chartFrameStyle.borderColor && chartFrameStyle.borderWidth && chartFrameStyle.borderStyle) {
