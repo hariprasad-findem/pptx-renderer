@@ -2111,7 +2111,7 @@ function buildBarChartOption(
   const categoryAxisDef: Record<string, unknown> = {
     type: 'category',
     data: categories,
-    axisLabel: { interval: 0, rotate: categories.length > 6 ? 30 : 0, fontSize: 10 },
+    axisLabel: { interval: 0, rotate: 0, fontSize: 10 },
   };
   applyAxisInfo(categoryAxisDef, categoryAxis, 'category');
 
@@ -2218,9 +2218,14 @@ function buildLineChartOption(
     .map((ser, i) => ({ ser, order: ser.child('order').numAttr('val') ?? i }))
     .sort((a, b) => a.order - b.order)
     .map((x) => x.ser);
+  const chartMarkerNode = chartTypeNode.child('marker');
+  const chartMarker = chartMarkerNode.exists() ? parseOoxmlBoolElement(chartMarkerNode) : undefined;
+  const chartMarkerSymbol =
+    chartMarker === true ? 'diamond' : chartMarker === false ? 'none' : undefined;
 
   const series: echarts.LineSeriesOption[] = seriesArr.map((s, idx) => {
-    const echartsSymbol = mapOoxmlSymbol(s.markerSymbol);
+    const markerSymbol = s.markerSymbol ?? chartMarkerSymbol;
+    const echartsSymbol = mapOoxmlSymbol(markerSymbol);
     const showSymbol = echartsSymbol !== undefined ? echartsSymbol !== 'none' : undefined;
     const lineWidth = s.lineWidth ?? 3;
     const lineStyle = s.colorHex
@@ -2255,7 +2260,9 @@ function buildLineChartOption(
       : echartsSymbol && echartsSymbol !== 'none'
         ? echartsSymbol
         : undefined;
-    const symbolSize = forceSymbolForLabel ? 0 : s.markerSize;
+    const symbolSize = forceSymbolForLabel
+      ? 0
+      : (s.markerSize ?? (s.markerSymbol === undefined && chartMarker === true ? 5 : undefined));
     const resolvedShowSymbol = forceSymbolForLabel
       ? true
       : isArea && echartsSymbol === undefined
@@ -2314,7 +2321,7 @@ function buildLineChartOption(
     type: 'category',
     data: categories,
     ...(isArea ? { boundaryGap: false } : {}),
-    axisLabel: { interval: 0, rotate: categories.length > 6 ? 30 : 0 },
+    axisLabel: { interval: 0, rotate: 0 },
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
 
@@ -2925,7 +2932,7 @@ function buildStockChartOption(
   const xAxisDef: Record<string, unknown> = {
     type: 'category',
     data: categories,
-    axisLabel: { interval: 0, rotate: categories.length > 4 ? 30 : 0, fontSize: 10 },
+    axisLabel: { interval: 0, rotate: 0, fontSize: 10 },
     splitLine: { show: false },
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');

@@ -5041,6 +5041,78 @@ describe('ChartRenderer', () => {
       expect(option.grid.left).toBeGreaterThanOrEqual(48);
     });
 
+    it('keeps dense line chart category labels horizontal unless OOXML requests rotation (oracle-pypptx-chart-0021)', () => {
+      const categories = Array.from({ length: 24 }, (_, idx) => idx + 1);
+      const points = categories
+        .map((value, idx) => `<c:pt idx="${idx}"><c:v>${value}</c:v></c:pt>`)
+        .join('');
+      const values = [
+        110, 103, 93, 106, 104, 101, 98, 92, 105, 98, 109, 122, 129, 121, 129, 132, 123, 113, 105,
+        101, 98, 104, 113, 103,
+      ]
+        .map((value, idx) => `<c:pt idx="${idx}"><c:v>${value}</c:v></c:pt>`)
+        .join('');
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="0"/>
+          <c:plotArea>
+            <c:lineChart>
+              <c:grouping val="standard"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Monthly Trend</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="24"/>${points}</c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="24"/>${values}</c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:marker val="1"/>
+              <c:smooth val="0"/>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:lineChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      expect((option.xAxis as any).axisLabel.rotate).toBe(0);
+    });
+
+    it('uses the chart-level line marker default when series markers are omitted (oracle-pypptx-chart-0021)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:lineChart>
+              <c:grouping val="standard"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Monthly Trend</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>3</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>110</c:v></c:pt><c:pt idx="1"><c:v>103</c:v></c:pt><c:pt idx="2"><c:v>93</c:v></c:pt></c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:marker val="1"/>
+              <c:smooth val="0"/>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:lineChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+      expect(series.showSymbol).toBe(true);
+      expect(series.symbol).toBe('diamond');
+      expect(series.symbolSize).toBe(5);
+    });
+
     it('applies major gridline line style from value axis spPr', () => {
       const xml = `<c:chartSpace
         xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
