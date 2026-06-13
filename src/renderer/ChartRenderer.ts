@@ -1988,7 +1988,7 @@ function buildBarChartOption(
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
 
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2226,7 +2226,7 @@ function buildLineChartOption(
 ): echarts.EChartsOption {
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2421,7 +2421,7 @@ function buildPieChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2562,7 +2562,7 @@ function buildRadarChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2684,7 +2684,7 @@ function buildScatterChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2850,7 +2850,7 @@ function buildBubbleChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
@@ -2969,7 +2969,7 @@ function buildStockChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTxPrStyle(chartNode.child('title'), ctx);
+  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
   const titleLayout = extractTitleManualLayout(chartNode);
   const legendInfo = extractLegendInfo(chartNode, ctx);
 

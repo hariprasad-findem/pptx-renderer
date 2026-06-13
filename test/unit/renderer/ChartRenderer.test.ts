@@ -70,6 +70,7 @@ function buildChartSpaceXml(opts: {
   /** Optional chart title text and txPr style. */
   titleText?: string;
   titleTxPr?: string;
+  titleRichPPr?: string;
   /** Optional manual layout for title; values are OOXML normalized fractions. */
   titleManualLayout?: { x?: number; y?: number };
 }): string {
@@ -95,6 +96,7 @@ function buildChartSpaceXml(opts: {
     plotAreaManualLayout,
     titleText,
     titleTxPr,
+    titleRichPPr,
     titleManualLayout,
   } = opts;
 
@@ -141,6 +143,7 @@ function buildChartSpaceXml(opts: {
       }</c:manualLayout></c:layout>`
     : '';
   const titleTxPrXml = titleTxPr ? `<c:txPr>${titleTxPr}</c:txPr>` : '';
+  const titleRichPPrXml = titleRichPPr ? `<a:pPr>${titleRichPPr}</a:pPr>` : '';
   const titleManualLayoutXml = titleManualLayout
     ? `<c:layout><c:manualLayout>${
         titleManualLayout.x !== undefined ? `<c:x val="${titleManualLayout.x}"/>` : ''
@@ -149,7 +152,7 @@ function buildChartSpaceXml(opts: {
       }</c:manualLayout></c:layout>`
     : '';
   const titleXml = titleText
-    ? `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${titleText}</a:t></a:r></a:p></c:rich></c:tx>${titleManualLayoutXml}${titleTxPrXml}</c:title>`
+    ? `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p>${titleRichPPrXml}<a:r><a:t>${titleText}</a:t></a:r></a:p></c:rich></c:tx>${titleManualLayoutXml}${titleTxPrXml}</c:title>`
     : '';
   const valAxTitleTxPrXml = valAxTitleTxPr ? `<c:txPr>${valAxTitleTxPr}</c:txPr>` : '';
   const valAxTitleXml = valAxTitleText
@@ -1071,6 +1074,20 @@ describe('ChartRenderer', () => {
       const title = option.title as any;
       expect(title?.textStyle?.fontSize).toBe(18);
       expect(title?.textStyle?.color).toMatch(/[1]{1}[2]{1}[3]{1}[4]{1}[5]{1}[6]{1}|#123456/i);
+    });
+
+    it('should apply title rich text style when title txPr is omitted', () => {
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        titleText: 'Rich Title',
+        titleRichPPr:
+          '<a:defRPr sz="1600"><a:solidFill><a:srgbClr val="654321"/></a:solidFill></a:defRPr>',
+      });
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+      expect(title?.textStyle?.fontSize).toBe(16);
+      expect(title?.textStyle?.color).toBe('#654321');
     });
 
     it('should use Office black foreground for title color when txPr omits it', () => {
