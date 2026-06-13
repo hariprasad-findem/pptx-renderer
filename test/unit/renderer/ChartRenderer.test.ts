@@ -316,6 +316,14 @@ describe('ChartRenderer', () => {
       expect(legend?.orient).toBe('vertical');
     });
 
+    it('should use Office black foreground for legend text when txPr omits it', () => {
+      const xml = buildChartSpaceXml({ hasLegend: true, legendPos: 'b' });
+      const { option } = parseChartOption(xml);
+
+      const legend = option.legend as any;
+      expect(legend?.textStyle?.color).toBe('#000000');
+    });
+
     it('should apply legend text color from legend txPr', () => {
       const legendTxPr = `
         <a:bodyPr/>
@@ -707,6 +715,19 @@ describe('ChartRenderer', () => {
       expect(yAxis.nameTextStyle.fontFamily).not.toContain('+mn-lt');
     });
 
+    it('should use Office black foreground for value axis title when txPr omits it', () => {
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        valAxDeleted: false,
+        valAxTitleText: 'Revenue',
+      });
+      const { option } = parseChartOption(xml);
+
+      const yAxis = option.yAxis as any;
+      expect(yAxis.name).toBe('Revenue');
+      expect(yAxis.nameTextStyle?.color).toBe('#000000');
+    });
+
     it('should apply chart clrMapOvr when resolving axis txPr schemeClr', () => {
       const catAxTxPr = `
         <a:bodyPr/>
@@ -1050,6 +1071,17 @@ describe('ChartRenderer', () => {
       const title = option.title as any;
       expect(title?.textStyle?.fontSize).toBe(18);
       expect(title?.textStyle?.color).toMatch(/[1]{1}[2]{1}[3]{1}[4]{1}[5]{1}[6]{1}|#123456/i);
+    });
+
+    it('should use Office black foreground for title color when txPr omits it', () => {
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        titleText: 'Default Title',
+      });
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+      expect(title?.textStyle?.color).toBe('#000000');
     });
 
     it('should apply title manualLayout x/y to title left/top', () => {
@@ -1727,6 +1759,36 @@ describe('ChartRenderer', () => {
       const series = option.series as any[];
       expect(series.length).toBeGreaterThan(0);
       expect(series[0].type).toBe('radar');
+    });
+
+    it('should apply chart default text style to radar category labels', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1500"/></a:pPr></a:p></c:txPr>
+          <c:chart>
+            <c:plotArea>
+              <c:radarChart>
+                <c:radarStyle val="standard"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Series 1</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>Feature A</c:v></c:pt><c:pt idx="1"><c:v>Feature B</c:v></c:pt><c:pt idx="2"><c:v>Feature C</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>80</c:v></c:pt><c:pt idx="1"><c:v>90</c:v></c:pt><c:pt idx="2"><c:v>70</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:radarChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const radar = option.radar as any;
+      expect(radar?.name?.textStyle?.color).toBe('#000000');
+      expect(radar?.name?.textStyle?.fontSize).toBe(20);
+      expect(radar?.name?.textStyle?.fontFamily).toContain('Calibri');
     });
 
     it('keeps radar top legend above labels with line icons and unfilled series areas', () => {

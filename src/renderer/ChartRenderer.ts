@@ -3459,6 +3459,24 @@ function buildChartPalette(
 // Chart-Space Default Font Size + Legend Grid Adjustment
 // ---------------------------------------------------------------------------
 
+type RadarTextContainer = {
+  name?: {
+    textStyle?: Record<string, unknown>;
+  };
+};
+
+function getRadarNameTextStyles(option: echarts.EChartsOption): Record<string, unknown>[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const opt = option as any;
+  const radars = (Array.isArray(opt.radar) ? opt.radar : opt.radar ? [opt.radar] : []) as unknown[];
+  return radars
+    .filter((radar): radar is RadarTextContainer => typeof radar === 'object' && radar !== null)
+    .map((radar) => {
+      const name = radar.name ?? (radar.name = {});
+      return name.textStyle ?? (name.textStyle = {});
+    });
+}
+
 /**
  * Apply chart-space default font size to all text elements in the ECharts option
  * that still use hardcoded small defaults. Only overrides when no explicit OOXML
@@ -3477,12 +3495,10 @@ function applyDefaultFontSizes(option: echarts.EChartsOption, defaultFs: number)
   }
 
   // Radar indicator font size
-  if (opt.radar) {
-    const radar = Array.isArray(opt.radar) ? opt.radar[0] : opt.radar;
-    if (radar?.name?.textStyle) {
-      if (!radar.name.textStyle.fontSize || radar.name.textStyle.fontSize <= 10) {
-        radar.name.textStyle.fontSize = defaultFs;
-      }
+  for (const textStyle of getRadarNameTextStyles(option)) {
+    const current = textStyle.fontSize;
+    if (typeof current !== 'number' || current <= 10) {
+      textStyle.fontSize = defaultFs;
     }
   }
 
@@ -3539,6 +3555,45 @@ function applyDefaultFontFamily(option: echarts.EChartsOption, fontFamily: strin
 
   if (opt.legend?.textStyle && !opt.legend.textStyle.fontFamily) {
     opt.legend.textStyle.fontFamily = fontFamily;
+  }
+
+  for (const textStyle of getRadarNameTextStyles(option)) {
+    if (!textStyle.fontFamily) {
+      textStyle.fontFamily = fontFamily;
+    }
+  }
+}
+
+function applyDefaultTextColors(option: echarts.EChartsOption): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const opt = option as any;
+  if (opt.title?.textStyle && opt.title.textStyle.color === undefined) {
+    opt.title.textStyle.color = DEFAULT_CHART_FOREGROUND_COLOR;
+  }
+
+  const legends = Array.isArray(opt.legend) ? opt.legend : opt.legend ? [opt.legend] : [];
+  for (const legend of legends) {
+    if (!legend || legend.show === false) continue;
+    const textStyle = legend.textStyle ?? (legend.textStyle = {});
+    if (textStyle.color === undefined) {
+      textStyle.color = DEFAULT_CHART_FOREGROUND_COLOR;
+    }
+  }
+
+  const xAxes = Array.isArray(opt.xAxis) ? opt.xAxis : opt.xAxis ? [opt.xAxis] : [];
+  const yAxes = Array.isArray(opt.yAxis) ? opt.yAxis : opt.yAxis ? [opt.yAxis] : [];
+  for (const axis of [...xAxes, ...yAxes]) {
+    if (!axis?.name) continue;
+    const nameTextStyle = axis.nameTextStyle ?? (axis.nameTextStyle = {});
+    if (nameTextStyle.color === undefined) {
+      nameTextStyle.color = DEFAULT_CHART_FOREGROUND_COLOR;
+    }
+  }
+
+  for (const textStyle of getRadarNameTextStyles(option)) {
+    if (textStyle.color === undefined) {
+      textStyle.color = DEFAULT_CHART_FOREGROUND_COLOR;
+    }
   }
 }
 
@@ -4389,6 +4444,7 @@ export function parseChartXml(
     if (defaultFontFamily) {
       applyDefaultFontFamily(option, defaultFontFamily);
     }
+    applyDefaultTextColors(option);
 
     // Adjust grid margins for legend placement (non-overlay)
     applyLegendGridMargins(option, chart, defaultFs);
