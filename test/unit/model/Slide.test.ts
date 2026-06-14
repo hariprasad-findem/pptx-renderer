@@ -49,6 +49,11 @@ describe('parseSlide', () => {
     expect(slide.showMasterSp).toBe(false);
   });
 
+  it('parses showMasterSp="false" as false', () => {
+    const slide = parseSlide(makeSlideXml({ showMasterSp: 'false' }), 0, makeRels());
+    expect(slide.showMasterSp).toBe(false);
+  });
+
   it('parses sp as shape node', () => {
     const slide = parseSlide(makeSlideXml({
       shapes: `

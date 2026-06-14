@@ -601,8 +601,13 @@ function parseDlblBool(dLbls: SafeXmlNode, childName: string): boolean {
 
 function parseOoxmlBoolElement(node: SafeXmlNode): boolean {
   if (!node.exists()) return false;
-  const val = node.attr('val');
-  return val !== '0' && val !== 'false';
+  return parseOoxmlBoolValue(node.attr('val'), true);
+}
+
+function parseOoxmlBoolValue(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue;
+  const normalized = value.toLowerCase();
+  return normalized !== '0' && normalized !== 'false';
 }
 
 function parseDataLabelManualLayout(node: SafeXmlNode): DataLabelManualLayout | undefined {
@@ -3195,7 +3200,7 @@ interface DataTableInfo {
 function parseDataTable(plotArea: SafeXmlNode): { showKeys: boolean } | undefined {
   const dTable = plotArea.child('dTable');
   if (!dTable.exists()) return undefined;
-  const showKeys = dTable.child('showKeys').attr('val') !== '0';
+  const showKeys = parseOoxmlBoolValue(dTable.child('showKeys').attr('val'), true);
   return { showKeys };
 }
 

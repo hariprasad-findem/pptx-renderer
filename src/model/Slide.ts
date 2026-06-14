@@ -26,6 +26,12 @@ export interface SlideData {
   showMasterSp: boolean;
 }
 
+function parseDefaultTrueBoolAttr(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const normalized = value.toLowerCase();
+  return normalized !== '0' && normalized !== 'false';
+}
+
 /**
  * Check whether a graphicFrame contains a table (`a:tbl`).
  */
@@ -309,9 +315,8 @@ export function parseSlide(
   // --- Layout relationship ---
   const layoutIndex = findLayoutRel(rels);
 
-  // --- showMasterSp: if "0", layout/master shapes should not be rendered on this slide ---
-  const showMasterSpAttr = root.attr('showMasterSp');
-  const showMasterSp = showMasterSpAttr !== '0';
+  // --- showMasterSp: if false, layout/master shapes should not be rendered on this slide ---
+  const showMasterSp = parseDefaultTrueBoolAttr(root.attr('showMasterSp'));
 
   return {
     index,

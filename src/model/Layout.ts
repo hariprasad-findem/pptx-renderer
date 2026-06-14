@@ -27,6 +27,12 @@ export interface LayoutData {
   showMasterSp: boolean;
 }
 
+function parseDefaultTrueBoolAttr(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const normalized = value.toLowerCase();
+  return normalized !== '0' && normalized !== 'false';
+}
+
 /**
  * Check whether a shape node contains a placeholder definition.
  */
@@ -202,9 +208,8 @@ export function parseLayout(root: SafeXmlNode): LayoutData {
   // --- Placeholders (recursive so we find title/body inside grpSp; resolve position in slide space) ---
   const placeholders = extractPlaceholdersRecursive(spTree, null);
 
-  // --- showMasterSp: if "0", master shapes should not be rendered for this layout ---
-  const showMasterSpAttr = root.attr('showMasterSp');
-  const showMasterSp = showMasterSpAttr !== '0';
+  // --- showMasterSp: if false, master shapes should not be rendered for this layout ---
+  const showMasterSp = parseDefaultTrueBoolAttr(root.attr('showMasterSp'));
 
   return {
     colorMapOverride,

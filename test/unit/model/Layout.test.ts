@@ -47,6 +47,11 @@ describe('parseLayout', () => {
     expect(layout.showMasterSp).toBe(false);
   });
 
+  it('parses showMasterSp="false" as false', () => {
+    const layout = parseLayout(makeLayoutXml({ showMasterSp: 'false' }));
+    expect(layout.showMasterSp).toBe(false);
+  });
+
   it('parses showMasterSp="1" as true', () => {
     const layout = parseLayout(makeLayoutXml({ showMasterSp: '1' }));
     expect(layout.showMasterSp).toBe(true);

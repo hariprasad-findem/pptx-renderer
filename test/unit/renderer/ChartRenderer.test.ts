@@ -2551,6 +2551,48 @@ describe('ChartRenderer', () => {
       expect(dataTable?.showKeys).toBeDefined();
     });
 
+    it('treats c:dTable showKeys val="false" as disabled', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:barChart>
+                <c:grouping val="clustered"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx>
+                    <c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Series</c:v></c:pt></c:strCache></c:strRef>
+                  </c:tx>
+                  <c:cat>
+                    <c:strRef><c:strCache><c:ptCount val="1"/>
+                      <c:pt idx="0"><c:v>A</c:v></c:pt>
+                    </c:strCache></c:strRef>
+                  </c:cat>
+                  <c:val>
+                    <c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="1"/>
+                      <c:pt idx="0"><c:v>10</c:v></c:pt>
+                    </c:numCache></c:numRef>
+                  </c:val>
+                </c:ser>
+              </c:barChart>
+              <c:dTable>
+                <c:showKeys val="false"/>
+              </c:dTable>
+              <c:catAx>
+                <c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/>
+              </c:catAx>
+              <c:valAx>
+                <c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/>
+              </c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { dataTable } = parseChartOption(xml);
+      expect(dataTable?.showKeys).toBe(false);
+    });
+
     it('should apply background colors to chart', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
