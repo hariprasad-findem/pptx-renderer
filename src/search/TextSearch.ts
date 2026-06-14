@@ -52,6 +52,20 @@ const DEFAULT_INDEX_OPTIONS: Required<TextIndexOptions> = {
   includeGroups: true,
 };
 
+interface CoordinateTransform {
+  offsetX: number;
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
+}
+
+const IDENTITY_TRANSFORM: CoordinateTransform = {
+  offsetX: 0,
+  offsetY: 0,
+  scaleX: 1,
+  scaleY: 1,
+};
+
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const getTextBodyText = (textBody: TextBody | undefined): string => {
@@ -61,11 +75,14 @@ const getTextBodyText = (textBody: TextBody | undefined): string => {
 
 const getCellText = (cell: TableCell): string => getTextBodyText(cell.textBody);
 
-const toBounds = (node: BaseNodeData): TextBounds => ({
-  x: node.position.x,
-  y: node.position.y,
-  w: node.size.w,
-  h: node.size.h,
+const toBounds = (
+  node: BaseNodeData,
+  transform: CoordinateTransform = IDENTITY_TRANSFORM,
+): TextBounds => ({
+  x: transform.offsetX + node.position.x * transform.scaleX,
+  y: transform.offsetY + node.position.y * transform.scaleY,
+  w: node.size.w * transform.scaleX,
+  h: node.size.h * transform.scaleY,
 });
 
 const shouldAddText = (text: string): boolean => text.trim().length > 0;
@@ -76,6 +93,11 @@ const isAsciiWordChar = (char: string | undefined): boolean =>
 const isWholeWordMatch = (text: string, start: number, end: number): boolean =>
   !isAsciiWordChar(text[start - 1]) && !isAsciiWordChar(text[end]);
 
+const rotationSwapsAxes = (rotation: number): boolean => {
+  const normalized = ((rotation % 360) + 360) % 360;
+  return Math.abs(normalized - 90) < 0.0001 || Math.abs(normalized - 270) < 0.0001;
+};
+
 const createSnippet = (text: string, start: number, end: number, radius: number): string => {
   const from = Math.max(0, start - radius);
   const to = Math.min(text.length, end + radius);
@@ -84,7 +106,20 @@ const createSnippet = (text: string, start: number, end: number, radius: number)
   return `${prefix}${text.slice(from, to)}${suffix}`;
 };
 
-const parseGroupChild = (childXml: SafeXmlNode): BaseNodeData | undefined => {
+const isPlaceholderNode = (node: SafeXmlNode): boolean => {
+  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
+    const nv = node.child(wrapper);
+    if (nv.exists() && nv.child('nvPr').child('ph').exists()) return true;
+  }
+  return false;
+};
+
+const parseGroupChild = (
+  childXml: SafeXmlNode,
+  skipPlaceholders = false,
+): BaseNodeData | undefined => {
+  if (skipPlaceholders && isPlaceholderNode(childXml)) return undefined;
+
   switch (childXml.localName) {
     case 'sp':
     case 'cxnSp':
@@ -104,11 +139,67 @@ const parseGroupChild = (childXml: SafeXmlNode): BaseNodeData | undefined => {
   }
 };
 
+const getGroupChildTransform = (
+  group: GroupNodeData,
+  child: BaseNodeData,
+  parentTransform: CoordinateTransform,
+): CoordinateTransform => {
+  if (group.childExtent.w <= 0 || group.childExtent.h <= 0) {
+    return {
+      offsetX: parentTransform.offsetX + group.position.x * parentTransform.scaleX,
+      offsetY: parentTransform.offsetY + group.position.y * parentTransform.scaleY,
+      scaleX: parentTransform.scaleX,
+      scaleY: parentTransform.scaleY,
+    };
+  }
+
+  const scaleX = group.childExtent.w > 0 ? group.size.w / group.childExtent.w : 1;
+  const scaleY = group.childExtent.h > 0 ? group.size.h / group.childExtent.h : 1;
+  if (rotationSwapsAxes(child.rotation)) {
+    const rotatedBBoxX = child.position.x + (child.size.w - child.size.h) / 2;
+    const rotatedBBoxY = child.position.y + (child.size.h - child.size.w) / 2;
+    const nextSize = {
+      w: child.size.w * scaleY,
+      h: child.size.h * scaleX,
+    };
+    const nextPosition = {
+      x: (rotatedBBoxX - group.childOffset.x) * scaleX - (nextSize.w - nextSize.h) / 2,
+      y: (rotatedBBoxY - group.childOffset.y) * scaleY - (nextSize.h - nextSize.w) / 2,
+    };
+    const childScaleX = parentTransform.scaleX * scaleY;
+    const childScaleY = parentTransform.scaleY * scaleX;
+    return {
+      offsetX:
+        parentTransform.offsetX +
+        (group.position.x + nextPosition.x) * parentTransform.scaleX -
+        child.position.x * childScaleX,
+      offsetY:
+        parentTransform.offsetY +
+        (group.position.y + nextPosition.y) * parentTransform.scaleY -
+        child.position.y * childScaleY,
+      scaleX: childScaleX,
+      scaleY: childScaleY,
+    };
+  }
+
+  return {
+    offsetX:
+      parentTransform.offsetX +
+      (group.position.x - group.childOffset.x * scaleX) * parentTransform.scaleX,
+    offsetY:
+      parentTransform.offsetY +
+      (group.position.y - group.childOffset.y * scaleY) * parentTransform.scaleY,
+    scaleX: parentTransform.scaleX * scaleX,
+    scaleY: parentTransform.scaleY * scaleY,
+  };
+};
+
 const addShapeText = (
   entries: TextIndexEntry[],
   slideIndex: number,
   node: ShapeNodeData,
   nodePath: string,
+  transform: CoordinateTransform,
 ): void => {
   const text = getTextBodyText(node.textBody);
   if (!shouldAddText(text)) return;
@@ -119,7 +210,7 @@ const addShapeText = (
     nodeType: node.nodeType,
     textKind: 'shape',
     text,
-    bounds: toBounds(node),
+    bounds: toBounds(node, transform),
   });
 };
 
@@ -128,6 +219,7 @@ const addTableText = (
   slideIndex: number,
   node: TableNodeData,
   nodePath: string,
+  transform: CoordinateTransform,
 ): void => {
   node.rows.forEach((row, rowIndex) => {
     row.cells.forEach((cell, cellIndex) => {
@@ -140,7 +232,7 @@ const addTableText = (
         nodeType: node.nodeType,
         textKind: 'table-cell',
         text,
-        bounds: toBounds(node),
+        bounds: toBounds(node, transform),
         rowIndex,
         cellIndex,
       });
@@ -154,38 +246,78 @@ const addNodeText = (
   node: SlideNode | BaseNodeData,
   nodePath: string,
   options: Required<TextIndexOptions>,
+  transform: CoordinateTransform = IDENTITY_TRANSFORM,
+  skipPlaceholders = false,
 ): void => {
+  if (skipPlaceholders && node.placeholder) return;
+
   switch (node.nodeType) {
     case 'shape':
       if (options.includeShapes) {
-        addShapeText(entries, slideIndex, node as ShapeNodeData, nodePath);
+        addShapeText(entries, slideIndex, node as ShapeNodeData, nodePath, transform);
       }
       break;
     case 'table':
       if (options.includeTables) {
-        addTableText(entries, slideIndex, node as TableNodeData, nodePath);
+        addTableText(entries, slideIndex, node as TableNodeData, nodePath, transform);
       }
       break;
     case 'group':
       if (!options.includeGroups) break;
-      (node as GroupNodeData).children.forEach((childXml, childIndex) => {
-        try {
-          const child = parseGroupChild(childXml);
-          if (!child) return;
-          const childId = child.id || child.name || String(childIndex);
-          addNodeText(
-            entries,
-            slideIndex,
-            child,
-            `${nodePath}/children/${childIndex}/${childId}`,
-            options,
-          );
-        } catch {
-          // Search should not make a presentation unusable because one group child is malformed.
-        }
-      });
+      {
+        const group = node as GroupNodeData;
+        (node as GroupNodeData).children.forEach((childXml, childIndex) => {
+          try {
+            const child = parseGroupChild(childXml, skipPlaceholders);
+            if (!child) return;
+            const childTransform = getGroupChildTransform(group, child, transform);
+            const childId = child.id || child.name || String(childIndex);
+            addNodeText(
+              entries,
+              slideIndex,
+              child,
+              `${nodePath}/children/${childIndex}/${childId}`,
+              options,
+              childTransform,
+              skipPlaceholders,
+            );
+          } catch {
+            // Search should not make a presentation unusable because one group child is malformed.
+          }
+        });
+      }
       break;
   }
+};
+
+const addTemplateText = (
+  entries: TextIndexEntry[],
+  slideIndex: number,
+  spTree: SafeXmlNode | undefined,
+  scope: 'master' | 'layout',
+  options: Required<TextIndexOptions>,
+): void => {
+  if (!spTree?.exists()) return;
+
+  spTree.allChildren().forEach((childXml, childIndex) => {
+    if (isPlaceholderNode(childXml)) return;
+    try {
+      const child = parseGroupChild(childXml, true);
+      if (!child) return;
+      const childId = child.id || child.name || String(childIndex);
+      addNodeText(
+        entries,
+        slideIndex,
+        child,
+        `slides/${slideIndex}/${scope}/nodes/${childId}`,
+        options,
+        IDENTITY_TRANSFORM,
+        true,
+      );
+    } catch {
+      // Keep text search best-effort, matching renderer error isolation for template shapes.
+    }
+  });
 };
 
 export const buildTextIndex = (
@@ -196,6 +328,20 @@ export const buildTextIndex = (
   const entries: TextIndexEntry[] = [];
 
   presentation.slides.forEach((slide, slideIndex) => {
+    if (slide.showMasterSp) {
+      const layoutPath = presentation.slideToLayout.get(slide.index) || slide.layoutIndex;
+      const layout = presentation.layouts.get(layoutPath);
+      const masterPath = layoutPath ? presentation.layoutToMaster.get(layoutPath) : '';
+      const master = masterPath ? presentation.masters.get(masterPath) : undefined;
+
+      if (layout?.showMasterSp && master) {
+        addTemplateText(entries, slideIndex, master.spTree, 'master', mergedOptions);
+      }
+      if (layout) {
+        addTemplateText(entries, slideIndex, layout.spTree, 'layout', mergedOptions);
+      }
+    }
+
     slide.nodes.forEach((node, nodeIndex) => {
       const nodeId = node.id || node.name || String(nodeIndex);
       addNodeText(entries, slideIndex, node, `slides/${slideIndex}/nodes/${nodeId}`, mergedOptions);

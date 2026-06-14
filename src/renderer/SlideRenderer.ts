@@ -255,6 +255,7 @@ export function renderSlide(
       ...ctx,
       slide: { ...ctx.slide, rels: ctx.master.rels },
       partPath: ctx.masterPath,
+      skipPlaceholderChildren: true,
     };
     const masterShapes = parseTemplateShapes(
       ctx.master.spTree,
@@ -278,6 +279,7 @@ export function renderSlide(
       ...ctx,
       slide: { ...ctx.slide, rels: ctx.layout.rels },
       partPath: ctx.layoutPath,
+      skipPlaceholderChildren: true,
     };
     const layoutShapes = parseTemplateShapes(
       ctx.layout.spTree,

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildTextIndex, searchPresentation, searchText } from '../../../src/search/TextSearch';
 import type { PresentationData } from '../../../src/model/Presentation';
+import type { LayoutData } from '../../../src/model/Layout';
+import type { MasterData } from '../../../src/model/Master';
 import type { ShapeNodeData, TextBody } from '../../../src/model/nodes/ShapeNode';
 import type { TableNodeData } from '../../../src/model/nodes/TableNode';
-import { SafeXmlNode } from '../../../src/parser/XmlParser';
+import type { GroupNodeData } from '../../../src/model/nodes/GroupNode';
+import { SafeXmlNode, parseXml } from '../../../src/parser/XmlParser';
 
 const emptySource = new SafeXmlNode(null);
 
@@ -51,6 +54,36 @@ const table = (id: string, cells: string[][]): TableNodeData => ({
   source: emptySource,
 });
 
+const templateShape = (id: string, name: string, text: string, placeholder = false): string => `
+  <sp>
+    <nvSpPr>
+      <cNvPr id="${id}" name="${name}"/>
+      <nvPr>${placeholder ? '<ph type="body" idx="1"/>' : ''}</nvPr>
+    </nvSpPr>
+    <spPr>
+      <xfrm>
+        <off x="914400" y="457200"/>
+        <ext cx="1828800" cy="457200"/>
+      </xfrm>
+    </spPr>
+    <txBody>
+      <bodyPr/>
+      <lstStyle/>
+      <p><r><t>${text}</t></r></p>
+    </txBody>
+  </sp>
+`;
+
+const spTree = (...children: string[]): SafeXmlNode =>
+  parseXml(`
+    <spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      ${children.join('\n')}
+    </spTree>
+  `);
+
+const emu = (px: number): number => Math.round(px * 9525);
+
 const presentation = (): PresentationData => ({
   width: 960,
   height: 540,
@@ -89,6 +122,38 @@ const presentation = (): PresentationData => ({
   isWps: false,
 });
 
+const withTemplateText = (): PresentationData => {
+  const pres = presentation();
+  const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+  const masterPath = 'ppt/slideMasters/slideMaster1.xml';
+
+  const layout: LayoutData = {
+    spTree: spTree(
+      templateShape('31', 'layout-footer', 'Visible layout footer'),
+      templateShape('32', 'layout-placeholder', 'Hidden layout placeholder', true),
+    ),
+    placeholders: [],
+    rels: new Map(),
+    showMasterSp: true,
+  };
+  const master: MasterData = {
+    colorMap: new Map(),
+    textStyles: {},
+    spTree: spTree(
+      templateShape('41', 'master-brand', 'Visible master brand'),
+      templateShape('42', 'master-placeholder', 'Hidden master placeholder', true),
+    ),
+    placeholders: [],
+    rels: new Map(),
+  };
+
+  pres.slideToLayout.set(0, layoutPath);
+  pres.layoutToMaster.set(layoutPath, masterPath);
+  pres.layouts.set(layoutPath, layout);
+  pres.masters.set(masterPath, master);
+  return pres;
+};
+
 describe('buildTextIndex', () => {
   it('extracts searchable text entries from shapes and table cells', () => {
     const index = buildTextIndex(presentation());
@@ -115,6 +180,110 @@ describe('buildTextIndex', () => {
       rowIndex: 0,
       cellIndex: 1,
     });
+  });
+
+  it('indexes visible non-placeholder text from slide layouts and masters', () => {
+    const index = buildTextIndex(withTemplateText());
+    const slide0Texts = index.filter((entry) => entry.slideIndex === 0).map((entry) => entry.text);
+
+    expect(slide0Texts).toContain('Visible layout footer');
+    expect(slide0Texts).toContain('Visible master brand');
+    expect(slide0Texts).not.toContain('Hidden layout placeholder');
+    expect(slide0Texts).not.toContain('Hidden master placeholder');
+
+    expect(searchPresentation(withTemplateText(), 'master brand')).toMatchObject([
+      {
+        slideIndex: 0,
+        nodeId: '41',
+        nodePath: 'slides/0/master/nodes/41',
+      },
+    ]);
+  });
+
+  it('respects template visibility flags when indexing slide text', () => {
+    const hiddenSlideTemplates = withTemplateText();
+    hiddenSlideTemplates.slides[0].showMasterSp = false;
+    expect(buildTextIndex(hiddenSlideTemplates).map((entry) => entry.text)).not.toEqual(
+      expect.arrayContaining(['Visible layout footer', 'Visible master brand']),
+    );
+
+    const hiddenMasterTemplates = withTemplateText();
+    hiddenMasterTemplates.layouts.get('ppt/slideLayouts/slideLayout1.xml')!.showMasterSp = false;
+    const texts = buildTextIndex(hiddenMasterTemplates).map((entry) => entry.text);
+    expect(texts).toContain('Visible layout footer');
+    expect(texts).not.toContain('Visible master brand');
+  });
+
+  it('reports group child text bounds in slide coordinates', () => {
+    const child = parseXml(templateShape('51', 'grouped-label', 'Grouped label'));
+    const group: GroupNodeData = {
+      id: 'group',
+      name: 'group',
+      nodeType: 'group',
+      position: { x: 50, y: 30 },
+      size: { w: 384, h: 192 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 192, h: 96 },
+      children: [child],
+      source: emptySource,
+    };
+    const pres = presentation();
+    pres.slides[0].nodes = [group];
+
+    expect(buildTextIndex(pres).find((entry) => entry.text === 'Grouped label')).toMatchObject({
+      nodePath: 'slides/0/nodes/group/children/0/51',
+      bounds: { x: 242, y: 126, w: 384, h: 96 },
+    });
+  });
+
+  it('matches renderer bounds for quarter-turn rotated group children', () => {
+    const child = parseXml(`
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="61" name="rotated-grouped-label"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm rot="16200000">
+            <a:off x="${emu(280)}" y="${emu(-280)}"/>
+            <a:ext cx="${emu(40)}" cy="${emu(600)}"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Rotated grouped label</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `);
+    const group: GroupNodeData = {
+      id: 'rotated-group',
+      name: 'rotated-group',
+      nodeType: 'group',
+      position: { x: 0, y: 0 },
+      size: { w: 500, h: 40 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 600, h: 40 },
+      children: [child],
+      source: emptySource,
+    };
+    const pres = presentation();
+    pres.slides[0].nodes = [group];
+
+    const result = buildTextIndex(pres).find((entry) => entry.text === 'Rotated grouped label');
+    expect(result?.bounds.x).toBeCloseTo(230);
+    expect(result?.bounds.y).toBeCloseTo(-230);
+    expect(result?.bounds.w).toBeCloseTo(40);
+    expect(result?.bounds.h).toBeCloseTo(500);
   });
 });
 

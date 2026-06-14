@@ -33,6 +33,8 @@ export interface RenderContext {
   chartInstances?: Set<ECharts>;
   /** Fill node from parent group's grpSpPr, used to resolve `a:grpFill` in children. */
   groupFillNode?: SafeXmlNode;
+  /** Template rendering skips placeholder descendants inside groups as well as top-level shapes. */
+  skipPlaceholderChildren?: boolean;
   /**
    * Navigation callback for shape-level hyperlink actions (action buttons, clickable shapes).
    * Called with target slide index (0-based) for `ppaction://hlinksldjump`,

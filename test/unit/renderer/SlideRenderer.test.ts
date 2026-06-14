@@ -17,31 +17,40 @@ function makeMinimalPres(): PresentationData {
     height: 540,
     slides: [],
     layouts: new Map([
-      [layoutPath, {
-        placeholders: [],
-        spTree: emptyXml,
-        rels: new Map(),
-        showMasterSp: true,
-      }],
+      [
+        layoutPath,
+        {
+          placeholders: [],
+          spTree: emptyXml,
+          rels: new Map(),
+          showMasterSp: true,
+        },
+      ],
     ]),
     masters: new Map([
-      [masterPath, {
-        colorMap: new Map(),
-        textStyles: {},
-        placeholders: [],
-        spTree: emptyXml,
-        rels: new Map(),
-      }],
+      [
+        masterPath,
+        {
+          colorMap: new Map(),
+          textStyles: {},
+          placeholders: [],
+          spTree: emptyXml,
+          rels: new Map(),
+        },
+      ],
     ]),
     themes: new Map([
-      [themePath, {
-        colorScheme: new Map(),
-        majorFont: { latin: 'Calibri', ea: '', cs: '' },
-        minorFont: { latin: 'Calibri', ea: '', cs: '' },
-        fillStyles: [],
-        lineStyles: [],
-        effectStyles: [],
-      }],
+      [
+        themePath,
+        {
+          colorScheme: new Map(),
+          majorFont: { latin: 'Calibri', ea: '', cs: '' },
+          minorFont: { latin: 'Calibri', ea: '', cs: '' },
+          fillStyles: [],
+          lineStyles: [],
+          effectStyles: [],
+        },
+      ],
     ]),
     slideToLayout: new Map([[0, layoutPath]]),
     layoutToMaster: new Map([[layoutPath, masterPath]]),
@@ -305,6 +314,58 @@ describe('renderSlide', () => {
     const { element: el } = renderSlide(pres, slide);
     // Placeholder shapes from master should NOT be rendered
     expect(el.children.length).toBeLessThanOrEqual(1);
+  });
+
+  it('skips placeholder children inside template groups', () => {
+    const pres = makeMinimalPres();
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.layouts.get(layoutPath)!.spTree = parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:grpSp>
+          <p:nvGrpSpPr>
+            <p:cNvPr id="200" name="layout-group"/>
+            <p:cNvGrpSpPr/>
+            <p:nvPr/>
+          </p:nvGrpSpPr>
+          <p:grpSpPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="914400" cy="914400"/>
+              <a:chOff x="0" y="0"/>
+              <a:chExt cx="914400" cy="914400"/>
+            </a:xfrm>
+          </p:grpSpPr>
+          <p:sp>
+            <p:nvSpPr>
+              <p:cNvPr id="201" name="group-placeholder"/>
+              <p:cNvSpPr/>
+              <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+            </p:nvSpPr>
+            <p:spPr>
+              <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+              <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            </p:spPr>
+            <p:txBody>
+              <a:bodyPr/>
+              <a:lstStyle/>
+              <a:p><a:r><a:t>Hidden grouped template placeholder</a:t></a:r></a:p>
+            </p:txBody>
+          </p:sp>
+        </p:grpSp>
+      </p:spTree>
+    `);
+
+    const slide: SlideData = {
+      index: 0,
+      nodes: [],
+      rels: new Map(),
+      slidePath: 'ppt/slides/slide1.xml',
+      showMasterSp: true,
+    };
+    const { element: el } = renderSlide(pres, slide);
+
+    expect(el.textContent).not.toContain('Hidden grouped template placeholder');
   });
 
   it('skips layout shapes when layout.showMasterSp is false', () => {

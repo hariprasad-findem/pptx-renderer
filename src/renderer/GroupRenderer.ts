@@ -283,11 +283,21 @@ import { parseGroupNode } from '../model/nodes/GroupNode';
 import { parseChartNode } from '../model/nodes/ChartNode';
 import { parseOleFrameAsPicture } from '../model/Slide';
 
+function isPlaceholderNode(node: SafeXmlNode): boolean {
+  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
+    const nv = node.child(wrapper);
+    if (nv.exists() && nv.child('nvPr').child('ph').exists()) return true;
+  }
+  return false;
+}
+
 /**
  * Parse a raw XML child node from a group's spTree into a typed node object.
  * Returns undefined for unrecognized or unsupported elements.
  */
 function parseGroupChild(childXml: SafeXmlNode, ctx: RenderContext): BaseNodeData | undefined {
+  if (ctx.skipPlaceholderChildren && isPlaceholderNode(childXml)) return undefined;
+
   const tag = childXml.localName;
 
   switch (tag) {
