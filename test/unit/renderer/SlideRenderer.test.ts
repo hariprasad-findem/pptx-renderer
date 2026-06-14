@@ -289,6 +289,55 @@ describe('renderSlide', () => {
     expect(el.textContent).not.toContain('Chart not found');
   });
 
+  it('renders layout OLE fallback preview images', () => {
+    const pres = makeMinimalPres();
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.layouts.get(layoutPath)!.spTree = parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:graphicFrame>
+          <p:nvGraphicFramePr>
+            <p:cNvPr id="20" name="Layout OLE Preview"/>
+            <p:cNvGraphicFramePr/>
+            <p:nvPr/>
+          </p:nvGraphicFramePr>
+          <p:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></p:xfrm>
+          <a:graphic>
+            <a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">
+              <mc:AlternateContent>
+                <mc:Fallback>
+                  <p:oleObj>
+                    <p:pic>
+                      <p:blipFill><a:blip r:embed="rIdPreview"/></p:blipFill>
+                    </p:pic>
+                  </p:oleObj>
+                </mc:Fallback>
+              </mc:AlternateContent>
+            </a:graphicData>
+          </a:graphic>
+        </p:graphicFrame>
+      </p:spTree>
+    `);
+    pres.layouts.get(layoutPath)!.rels.set('rIdPreview', {
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+      target: '../media/ole-preview.png',
+    });
+    pres.media.set('ppt/media/ole-preview.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+
+    const slide: SlideData = {
+      index: 0,
+      nodes: [],
+      rels: new Map(),
+      slidePath: 'ppt/slides/slide1.xml',
+      showMasterSp: true,
+    };
+    const { element: el } = renderSlide(pres, slide);
+
+    expect(el.querySelector('img')).not.toBeNull();
+  });
+
   it('skips placeholder shapes from master/layout spTree', () => {
     const pres = makeMinimalPres();
     const masterSpTree = parseXml(`

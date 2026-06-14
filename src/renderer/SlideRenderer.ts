@@ -2,7 +2,7 @@
  * Slide renderer — orchestrates rendering of a complete slide with all its nodes.
  */
 
-import { SlideData } from '../model/Slide';
+import { SlideData, parseOleFrameAsPicture } from '../model/Slide';
 import { PresentationData } from '../model/Presentation';
 import { RenderContext, createRenderContext } from './RenderContext';
 import { renderBackground } from './BackgroundRenderer';
@@ -181,6 +181,8 @@ function parseTemplateShapes(
             node = parseTableNode(child);
           } else if ((graphicData.attr('uri') || '').includes('chart') && rels && partPath) {
             node = parseChartNode(child, rels, partPath);
+          } else {
+            node = parseOleFrameAsPicture(child);
           }
           break;
         }
