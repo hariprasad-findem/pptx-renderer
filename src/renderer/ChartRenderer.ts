@@ -4411,13 +4411,13 @@ export function parseChartXml(
   const { chartBg, plotAreaBg } = extractBackgroundColors(chartXml, chart, chartCtx);
   const chartFrameStyle = extractChartFrameStyle(chartXml, chartCtx);
 
-  const chartTypeEntries = CHART_TYPE_ELEMENTS.map((typeName) => {
-    const chartTypeNode = plotArea.child(typeName);
-    if (!chartTypeNode.exists()) return null;
-    const seriesArr = parseSeries(chartTypeNode, chartCtx);
-    if (seriesArr.length === 0) return null;
-    return { typeName, chartTypeNode, seriesArr };
-  }).filter(
+  const chartTypeEntries = CHART_TYPE_ELEMENTS.flatMap((typeName) =>
+    plotArea.children(typeName).map((chartTypeNode) => {
+      const seriesArr = parseSeries(chartTypeNode, chartCtx);
+      if (seriesArr.length === 0) return null;
+      return { typeName, chartTypeNode, seriesArr };
+    }),
+  ).filter(
     (
       entry,
     ): entry is { typeName: OoxmlChartType; chartTypeNode: SafeXmlNode; seriesArr: SeriesData[] } =>
