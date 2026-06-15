@@ -32,14 +32,51 @@ export function getMimeType(path: string): string {
   return mimeMap[ext] || 'application/octet-stream';
 }
 
+function stripUriSuffix(target: string): string {
+  const suffixIndex = target.search(/[?#]/);
+  return suffixIndex >= 0 ? target.slice(0, suffixIndex) : target;
+}
+
 /**
  * Resolve a relative media path (from rels) to its canonical path in PptxFiles.media.
  * Rels targets are relative like "../media/image1.png".
  * Media paths in PptxFiles are like "ppt/media/image1.png".
  */
 export function resolveMediaPath(target: string): string {
-  const fileName = target.replace(/\\/g, '/').split('/').pop() || '';
+  const rawFileName = stripUriSuffix(target).replace(/\\/g, '/').split('/').pop() || '';
+  let fileName: string;
+  try {
+    fileName = decodeURIComponent(rawFileName);
+  } catch {
+    fileName = rawFileName;
+  }
   return `ppt/media/${fileName}`;
+}
+
+/**
+ * Return canonical media-path candidates for a relationship target.
+ *
+ * OOXML relationship targets are URI references, so `%20` normally means a
+ * literal space in the part name. Some producers/tests, however, keep the
+ * percent-encoded bytes in the ZIP entry name. Prefer the decoded OPC form but
+ * keep the raw basename as a compatibility fallback.
+ */
+export function resolveMediaPathCandidates(target: string): string[] {
+  const rawFileName = stripUriSuffix(target).replace(/\\/g, '/').split('/').pop() || '';
+  const decodedPath = resolveMediaPath(target);
+  const rawPath = `ppt/media/${rawFileName}`;
+  return decodedPath === rawPath ? [decodedPath] : [decodedPath, rawPath];
+}
+
+export function findMediaByTarget(
+  target: string,
+  media: Map<string, Uint8Array>,
+): { mediaPath: string; data: Uint8Array } | undefined {
+  for (const mediaPath of resolveMediaPathCandidates(target)) {
+    const data = media.get(mediaPath);
+    if (data) return { mediaPath, data };
+  }
+  return undefined;
 }
 
 /**

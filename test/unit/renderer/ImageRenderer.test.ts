@@ -74,6 +74,22 @@ describe('renderImage', () => {
   });
 
   describe('linked images', () => {
+    it('does not fall back to package media for disallowed external blipEmbed targets', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: 'file:///tmp/image1.png',
+        targetMode: 'External',
+      });
+      ctx.presentation.media.set('ppt/media/image1.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+
+      const el = renderImage(createPicNode(), ctx);
+
+      expect(el.querySelector('img')).toBeNull();
+      expect(el.textContent).toContain('Image not found');
+      expect(ctx.mediaUrlCache.size).toBe(0);
+    });
+
     it('renders a safe external image from blipLink when no embedded image is present', () => {
       const ctx = createMockRenderContext();
       ctx.slide.rels.set('rIdLink', {
@@ -591,6 +607,26 @@ describe('renderImage', () => {
       expect(video!.poster).not.toBe('');
     });
 
+    it('does not use package media as a video poster for disallowed external blipEmbed targets', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'image',
+        target: 'file:///tmp/image1.png',
+        targetMode: 'External',
+      });
+      ctx.slide.rels.set('rId2', { type: 'video', target: 'ppt/media/video1.mp4' });
+      ctx.presentation.media.set('ppt/media/image1.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+      ctx.presentation.media.set('ppt/media/video1.mp4', new Uint8Array([0x00]));
+      const node = createPicNode({ isVideo: true, mediaRId: 'rId2', blipEmbed: 'rId1' });
+
+      const el = renderImage(node, ctx);
+      const video = el.querySelector('video');
+
+      expect(video).not.toBeNull();
+      expect(video!.poster).toBe('');
+      expect(ctx.mediaUrlCache.has('ppt/media/image1.png')).toBe(false);
+    });
+
     it('shows poster with play overlay when video data is missing', () => {
       const ctx = createCtxWithMedia();
       const node = createPicNode({ isVideo: true, blipEmbed: 'rId1' });
@@ -646,6 +682,25 @@ describe('renderImage', () => {
       const img = el.querySelector('img');
       expect(audio).not.toBeNull();
       expect(img).not.toBeNull();
+    });
+
+    it('does not render audio poster from package media for disallowed external blipEmbed targets', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId1', {
+        type: 'image',
+        target: 'file:///tmp/image1.png',
+        targetMode: 'External',
+      });
+      ctx.slide.rels.set('rId2', { type: 'audio', target: 'ppt/media/audio1.mp3' });
+      ctx.presentation.media.set('ppt/media/image1.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+      ctx.presentation.media.set('ppt/media/audio1.mp3', new Uint8Array([0x00]));
+      const node = createPicNode({ isAudio: true, mediaRId: 'rId2', blipEmbed: 'rId1' });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.querySelector('audio')).not.toBeNull();
+      expect(el.querySelector('img')).toBeNull();
+      expect(ctx.mediaUrlCache.has('ppt/media/image1.png')).toBe(false);
     });
 
     it('shows Audio placeholder when no audio URL available', () => {

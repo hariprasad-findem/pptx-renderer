@@ -89,4 +89,9 @@ describe('resolveRelTarget', () => {
     expect(resolveRelTarget('ppt', 'slides/slide1.xml'))
       .toBe('ppt/slides/slide1.xml');
   });
+
+  it('ignores URI query and fragment suffixes for internal package targets', () => {
+    expect(resolveRelTarget('ppt/slides', 'slide2.xml#section')).toBe('ppt/slides/slide2.xml');
+    expect(resolveRelTarget('ppt/slides', 'slide2.xml?view=notes')).toBe('ppt/slides/slide2.xml');
+  });
 });

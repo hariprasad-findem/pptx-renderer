@@ -31,4 +31,43 @@ describe('renderer navigation helpers', () => {
 
     expect(resolveSlideNavigationIndex(ctx, 'PPACTION://hlinkshowjump?Jump=PreviousSlide')).toBe(0);
   });
+
+  it('ignores URI query and fragment suffixes when resolving slide relationship targets', () => {
+    const ctx = createMockRenderContext();
+    ctx.slide.slidePath = 'ppt/slides/slide1.xml';
+    ctx.presentation.slides = [
+      ctx.slide,
+      { ...ctx.slide, index: 1, slidePath: 'ppt/slides/slide2.xml', rels: new Map() },
+    ];
+
+    expect(
+      resolveSlideNavigationIndex(ctx, 'ppaction://hlinksldjump', {
+        type: 'slide',
+        target: 'slide2.xml#section',
+      }),
+    ).toBe(1);
+
+    expect(
+      resolveSlideNavigationIndex(ctx, 'ppaction://hlinksldjump', {
+        type: 'slide',
+        target: 'slide2.xml?view=notes',
+      }),
+    ).toBe(1);
+  });
+
+  it('does not resolve external TargetMode relationships as internal slide jumps', () => {
+    const ctx = createMockRenderContext();
+    ctx.presentation.slides = [
+      ctx.slide,
+      { ...ctx.slide, index: 1, slidePath: 'ppt/slides/slide2.xml', rels: new Map() },
+    ];
+
+    expect(
+      resolveSlideNavigationIndex(ctx, 'ppaction://hlinksldjump', {
+        type: 'hyperlink',
+        target: 'https://example.com/slide2.xml',
+        targetMode: 'External',
+      }),
+    ).toBeUndefined();
+  });
 });

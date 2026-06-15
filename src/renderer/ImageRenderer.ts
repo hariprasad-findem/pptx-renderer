@@ -4,8 +4,8 @@
 
 import { PicNodeData } from '../model/nodes/PicNode';
 import { RenderContext } from './RenderContext';
-import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
-import { isExternalTargetMode } from '../parser/RelParser';
+import { findMediaByTarget, getOrCreateBlobUrl, resolveMediaPath } from '../utils/media';
+import { isExternalTargetMode, RelEntry } from '../parser/RelParser';
 import { resolveColor, resolveFill, resolveLineStyle } from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { parseEmfContent } from '../utils/emfParser';
@@ -29,6 +29,19 @@ function isUnsupportedFormat(path: string): boolean {
 function isEmfFormat(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return ext === 'emf';
+}
+
+function resolveImageRelUrl(rel: RelEntry, ctx: RenderContext): string | undefined {
+  if (isExternalTargetMode(rel.targetMode)) {
+    return isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
+  }
+
+  const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+  if (!resolved) return undefined;
+  const { mediaPath, data } = resolved;
+  if (isUnsupportedFormat(mediaPath)) return undefined;
+
+  return getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,29 +108,36 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
       return wrapper;
     }
 
-    const mediaPath = resolveMediaPath(rel.target);
+    if (isExternalTargetMode(rel.targetMode)) {
+      url = isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
+      if (!url) {
+        renderPlaceholder(wrapper, 'Image not found');
+        return wrapper;
+      }
+    } else {
+      const mediaPathForType = resolveMediaPath(rel.target);
+      if (isUnsupportedFormat(mediaPathForType)) {
+        renderUnsupportedPlaceholder(wrapper, mediaPathForType);
+        return wrapper;
+      }
 
-    // Check for unsupported formats (WMF)
-    if (isUnsupportedFormat(mediaPath)) {
-      renderUnsupportedPlaceholder(wrapper, mediaPath);
-      return wrapper;
+      const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+      if (!resolved) {
+        renderPlaceholder(wrapper, 'Image not found');
+        return wrapper;
+      }
+      const { mediaPath, data } = resolved;
+
+      // Handle EMF images — extract embedded PDF/bitmap content
+      if (isEmfFormat(mediaPath)) {
+        const emfData = data instanceof Uint8Array ? data : new Uint8Array(data);
+        renderEmf(emfData, node, ctx, wrapper, mediaPath);
+        return wrapper;
+      }
+
+      // Create blob URL (with caching)
+      url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
     }
-
-    const data = ctx.presentation.media.get(mediaPath);
-    if (!data) {
-      renderPlaceholder(wrapper, 'Image not found');
-      return wrapper;
-    }
-
-    // Handle EMF images — extract embedded PDF/bitmap content
-    if (isEmfFormat(mediaPath)) {
-      const emfData = data instanceof Uint8Array ? data : new Uint8Array(data);
-      renderEmf(emfData, node, ctx, wrapper, mediaPath);
-      return wrapper;
-    }
-
-    // Create blob URL (with caching)
-    url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
   } else if (node.blipLink) {
     url = resolveMediaUrl(node.blipLink, ctx);
     if (!url) {
@@ -454,11 +474,7 @@ function renderVideo(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement
   if (node.blipEmbed) {
     const rel = ctx.slide.rels.get(node.blipEmbed);
     if (rel) {
-      const mediaPath = resolveMediaPath(rel.target);
-      const data = ctx.presentation.media.get(mediaPath);
-      if (data && !isUnsupportedFormat(mediaPath)) {
-        posterUrl = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
-      }
+      posterUrl = resolveImageRelUrl(rel, ctx);
     }
   }
 
@@ -511,10 +527,8 @@ function renderAudio(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement
     if (node.blipEmbed) {
       const rel = ctx.slide.rels.get(node.blipEmbed);
       if (rel) {
-        const mediaPath = resolveMediaPath(rel.target);
-        const data = ctx.presentation.media.get(mediaPath);
-        if (data && !isUnsupportedFormat(mediaPath)) {
-          const cached = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
+        const cached = resolveImageRelUrl(rel, ctx);
+        if (cached) {
           const img = document.createElement('img');
           img.src = cached;
           img.style.width = '100%';
@@ -554,9 +568,9 @@ function resolveMediaUrl(rId: string | undefined, ctx: RenderContext): string | 
   }
 
   // Resolve from embedded media
-  const mediaPath = resolveMediaPath(rel.target);
-  const data = ctx.presentation.media.get(mediaPath);
-  if (!data) return undefined;
+  const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+  if (!resolved) return undefined;
+  const { mediaPath, data } = resolved;
 
   return getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
 }

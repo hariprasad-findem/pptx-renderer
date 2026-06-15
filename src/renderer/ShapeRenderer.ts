@@ -90,8 +90,8 @@ import {
 import { emuToPx } from '../parser/units';
 import { applyTint, hexToRgb, rgbToHex } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
-import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
-import { isAllowedExternalUrl } from '../utils/urlSafety';
+import { findMediaByTarget, getOrCreateBlobUrl } from '../utils/media';
+import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
 import { getEffectiveBodyPrChild } from './TextBodyProperties';
 import { cssFontFamilyStack, resolveThemeFontStack } from './fontResolver';
 import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
@@ -235,12 +235,17 @@ function renderWarpedTextBody(node: ShapeNodeData, ctx: RenderContext): SVGSVGEl
 function resolveShapeBlipUrl(blipFill: SafeXmlNode, ctx: RenderContext): string | null {
   const blip = blipFill.child('blip');
   const embedId = blip.attr('embed') ?? blip.attr('r:embed');
-  if (!embedId) return null;
-  const rel = ctx.slide.rels.get(embedId);
+  const linkId = blip.attr('link') ?? blip.attr('r:link');
+  const relId = embedId ?? linkId;
+  if (!relId) return null;
+  const rel = ctx.slide.rels.get(relId);
   if (!rel) return null;
-  const mediaPath = resolveMediaPath(rel.target);
-  const data = ctx.presentation.media.get(mediaPath);
-  if (!data) return null;
+  if (isExternalTargetMode(rel.targetMode)) {
+    return isAllowedExternalMediaUrl(rel.target) ? rel.target : null;
+  }
+  const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+  if (!resolved) return null;
+  const { mediaPath, data } = resolved;
   return getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
 }
 

@@ -1,4 +1,4 @@
-import { resolveRelTarget, type RelEntry } from '../parser/RelParser';
+import { isExternalTargetMode, resolveRelTarget, type RelEntry } from '../parser/RelParser';
 import type { RenderContext } from './RenderContext';
 
 function dirname(path: string): string {
@@ -7,8 +7,13 @@ function dirname(path: string): string {
   return slashIndex >= 0 ? normalized.slice(0, slashIndex) : '';
 }
 
+function stripUriSuffix(path: string): string {
+  const suffixIndex = path.search(/[?#]/);
+  return suffixIndex >= 0 ? path.slice(0, suffixIndex) : path;
+}
+
 function normalizePackagePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\/+/, '');
+  return stripUriSuffix(path).replace(/\\/g, '/').replace(/^\/+/, '');
 }
 
 /**
@@ -18,6 +23,8 @@ function normalizePackagePath(path: string): string {
  * order comes from presentation.xml and can differ from slideN.xml numbering.
  */
 export function resolveSlideJumpIndex(ctx: RenderContext, rel: RelEntry): number | undefined {
+  if (isExternalTargetMode(rel.targetMode)) return undefined;
+
   const basePath = dirname(ctx.slide.slidePath || 'ppt/slides/slide1.xml');
   const targetPath = normalizePackagePath(resolveRelTarget(basePath, rel.target));
 
@@ -26,7 +33,7 @@ export function resolveSlideJumpIndex(ctx: RenderContext, rel: RelEntry): number
   );
   if (slideIndex >= 0) return slideIndex;
 
-  const fallback = rel.target.match(/(?:^|[\\/])slide(\d+)\.xml$/i);
+  const fallback = stripUriSuffix(rel.target).match(/(?:^|[\\/])slide(\d+)\.xml$/i);
   if (!fallback) return undefined;
 
   return parseInt(fallback[1], 10) - 1;

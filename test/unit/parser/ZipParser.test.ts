@@ -98,6 +98,23 @@ describe('parseZip – categorization', () => {
     expect(files.slideRels.get('ppt/slides/_rels/slide1.xml.rels')).toBe(relsXml);
   });
 
+  it('parses non-numeric slide part names and their relationship files', async () => {
+    const slideXml =
+      '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld /></p:sld>';
+    const relsXml =
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="layout" Target="../slideLayouts/title.xml"/></Relationships>';
+    const buffer = await buildZip([
+      ...SKELETON,
+      { path: 'ppt/slides/intro.xml', data: slideXml },
+      { path: 'ppt/slides/_rels/intro.xml.rels', data: relsXml },
+    ]);
+
+    const files = await parseZip(buffer);
+
+    expect(files.slides.get('ppt/slides/intro.xml')).toBe(slideXml);
+    expect(files.slideRels.get('ppt/slides/_rels/intro.xml.rels')).toBe(relsXml);
+  });
+
   it('does not place slide rels entries into result.slides', async () => {
     const buffer = await buildZip([
       ...SKELETON,
@@ -177,6 +194,23 @@ describe('parseZip – categorization', () => {
     expect(files.themes.get('ppt/theme/theme1.xml')).toBe(themeXml);
   });
 
+  it('parses non-numeric theme and themeOverride part names', async () => {
+    const themeXml =
+      '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Corporate" />';
+    const themeOverrideXml =
+      '<a:themeOverride xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" />';
+    const buffer = await buildZip([
+      ...SKELETON,
+      { path: 'ppt/theme/corporate.xml', data: themeXml },
+      { path: 'ppt/theme/themeOverrideSales.xml', data: themeOverrideXml },
+    ]);
+
+    const files = await parseZip(buffer);
+
+    expect(files.themes.get('ppt/theme/corporate.xml')).toBe(themeXml);
+    expect(files.themeOverrides?.get('ppt/theme/themeOverrideSales.xml')).toBe(themeOverrideXml);
+  });
+
   it('parses media files (ppt/media/*) as Uint8Array in result.media', async () => {
     // A minimal 1×1 white PNG (89 bytes)
     const pngBytes = new Uint8Array([
@@ -226,6 +260,22 @@ describe('parseZip – categorization', () => {
 
     expect(files.charts.size).toBe(1);
     expect(files.charts.get('ppt/charts/chart1.xml')).toBe(chartXml);
+  });
+
+  it('parses non-numeric chart part names and their relationship files', async () => {
+    const chartXml =
+      '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
+    const relsXml = '<Relationships />';
+    const buffer = await buildZip([
+      ...SKELETON,
+      { path: 'ppt/charts/sales.xml', data: chartXml },
+      { path: 'ppt/charts/_rels/sales.xml.rels', data: relsXml },
+    ]);
+
+    const files = await parseZip(buffer);
+
+    expect(files.charts.get('ppt/charts/sales.xml')).toBe(chartXml);
+    expect(files.chartRels?.get('ppt/charts/_rels/sales.xml.rels')).toBe(relsXml);
   });
 
   it('parses chart style files (ppt/charts/style1.xml) into result.chartStyles', async () => {

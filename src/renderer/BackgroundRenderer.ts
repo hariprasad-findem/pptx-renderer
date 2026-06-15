@@ -7,7 +7,7 @@ import { RenderContext } from './RenderContext';
 import { resolveColor, resolveFill, resolveThemeBackgroundFillReference } from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { isExternalTargetMode, RelEntry } from '../parser/RelParser';
-import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
+import { findMediaByTarget, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalMediaUrl } from '../utils/urlSafety';
 
 /**
@@ -209,9 +209,9 @@ function renderBlipBackground(
     if (!isAllowedExternalMediaUrl(rel.target)) return;
     url = rel.target;
   } else {
-    const mediaPath = resolveMediaPath(rel.target);
-    const data = ctx.presentation.media.get(mediaPath);
-    if (!data) return;
+    const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+    if (!resolved) return;
+    const { mediaPath, data } = resolved;
     url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
   }
 

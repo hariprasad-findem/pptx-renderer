@@ -15,6 +15,11 @@ export function isExternalTargetMode(targetMode: string | undefined): boolean {
   return targetMode?.toLowerCase() === 'external';
 }
 
+function stripUriSuffix(target: string): string {
+  const suffixIndex = target.search(/[?#]/);
+  return suffixIndex >= 0 ? target.slice(0, suffixIndex) : target;
+}
+
 /**
  * Parse a .rels XML string into a Map of relationship ID -> RelEntry.
  *
@@ -62,14 +67,16 @@ export function parseRels(xmlString: string): Map<string, RelEntry> {
  *     → 'ppt/slides/slide1.xml'
  */
 export function resolveRelTarget(basePath: string, target: string): string {
+  const targetPath = stripUriSuffix(target);
+
   // Absolute targets (start with /) are returned as-is (strip leading /)
-  if (target.startsWith('/')) {
-    return target.slice(1);
+  if (targetPath.startsWith('/')) {
+    return targetPath.slice(1);
   }
 
   // Split the base path into segments
   const baseParts = basePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  const targetParts = target.replace(/\\/g, '/').split('/').filter(Boolean);
+  const targetParts = targetPath.replace(/\\/g, '/').split('/').filter(Boolean);
 
   // Walk through target parts, resolving '..' by popping base parts
   const resolved = [...baseParts];

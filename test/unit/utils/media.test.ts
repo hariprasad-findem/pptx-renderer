@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getMimeType, resolveMediaPath, getOrCreateBlobUrl } from '../../../src/utils/media';
+import {
+  getMimeType,
+  resolveMediaPath,
+  resolveMediaPathCandidates,
+  findMediaByTarget,
+  getOrCreateBlobUrl,
+} from '../../../src/utils/media';
 
 describe('getMimeType', () => {
   it('returns correct MIME for common image formats', () => {
@@ -62,6 +68,36 @@ describe('resolveMediaPath', () => {
 
   it('normalizes backslash relationship targets before extracting the filename', () => {
     expect(resolveMediaPath('..\\media\\image1.png')).toBe('ppt/media/image1.png');
+  });
+
+  it('decodes percent-encoded relationship target filenames', () => {
+    expect(resolveMediaPath('../media/product%20photo%231.png')).toBe(
+      'ppt/media/product photo#1.png',
+    );
+  });
+
+  it('ignores URI query and fragment suffixes before extracting filenames', () => {
+    expect(resolveMediaPath('../media/image1.png#preview')).toBe('ppt/media/image1.png');
+    expect(resolveMediaPath('../media/image1.png?cache=1')).toBe('ppt/media/image1.png');
+  });
+
+  it('keeps raw percent-encoded filenames as fallback candidates', () => {
+    expect(resolveMediaPathCandidates('../media/product%20photo.png')).toEqual([
+      'ppt/media/product photo.png',
+      'ppt/media/product%20photo.png',
+    ]);
+  });
+
+  it('finds media by decoded target first and raw encoded target as compatibility fallback', () => {
+    const decodedMedia = new Map([['ppt/media/product photo.png', new Uint8Array([1])]]);
+    const rawMedia = new Map([['ppt/media/product%20photo.png', new Uint8Array([2])]]);
+
+    expect(findMediaByTarget('../media/product%20photo.png', decodedMedia)?.mediaPath).toBe(
+      'ppt/media/product photo.png',
+    );
+    expect(findMediaByTarget('../media/product%20photo.png', rawMedia)?.mediaPath).toBe(
+      'ppt/media/product%20photo.png',
+    );
   });
 });
 

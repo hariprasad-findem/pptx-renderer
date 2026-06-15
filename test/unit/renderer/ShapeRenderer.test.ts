@@ -2823,6 +2823,70 @@ describe('ShapeRenderer', () => {
     }
   });
 
+  it('does not fall back to package media for disallowed external shape blipFill targets', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:nvSpPr><p:cNvPr id="206" name="ExternalBlipShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:blipFill>
+            <a:blip r:embed="rId1"/>
+            <a:stretch><a:fillRect/></a:stretch>
+          </a:blipFill>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const ctx = createMockRenderContext();
+    ctx.slide.rels.set('rId1', {
+      type: 'image',
+      target: 'file:///tmp/image1.png',
+      targetMode: 'External',
+    });
+    ctx.presentation.media.set('ppt/media/image1.png', new Uint8Array([137, 80, 78, 71]));
+
+    const el = renderShape(shapeNode, ctx);
+
+    expect(el.querySelector('svg image')).toBeNull();
+    expect(ctx.mediaUrlCache.has('ppt/media/image1.png')).toBe(false);
+  });
+
+  it('renders safe external linked shape blipFill targets from r:link relationships', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:nvSpPr><p:cNvPr id="207" name="LinkedBlipShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:blipFill>
+            <a:blip r:link="rIdLinked"/>
+            <a:stretch><a:fillRect/></a:stretch>
+          </a:blipFill>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const ctx = createMockRenderContext();
+    ctx.slide.rels.set('rIdLinked', {
+      type: 'image',
+      target: 'https://example.com/fill.png',
+      targetMode: 'External',
+    });
+
+    const el = renderShape(shapeNode, ctx);
+    const image = el.querySelector('svg image');
+
+    expect(image).not.toBeNull();
+    expect(image!.getAttribute('href') ?? image!.getAttribute('xlink:href')).toBe(
+      'https://example.com/fill.png',
+    );
+  });
+
   it('renders multi-path preset (can shape with top ellipse)', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
