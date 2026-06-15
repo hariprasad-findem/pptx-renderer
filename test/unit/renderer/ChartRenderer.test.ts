@@ -1773,7 +1773,9 @@ describe('ChartRenderer', () => {
         </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
+      const radar = option.radar as any;
       const series = option.series as any[];
+      expect(radar.splitArea).toMatchObject({ show: false });
       expect(series.length).toBeGreaterThan(0);
       expect(series[0].type).toBe('radar');
     });
@@ -3130,6 +3132,83 @@ describe('ChartRenderer', () => {
 
       expect(yAxis.max).toBe(70);
       expect(yAxis.interval).toBe(10);
+    });
+
+    it('uses Office-like default grid margins for visible clustered column axes (oracle-pypptx-chart-0001)', () => {
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        valAxDeleted: false,
+        categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+        values: [45, 52, 48, 61],
+      });
+
+      const { option } = parseChartOption(xml);
+      const grid = option.grid as any;
+      const series = option.series as any[];
+
+      expect(grid.left).toBe(24);
+      expect(grid.bottom).toBe(20);
+      expect(series[0].barGap).toBe('0%');
+    });
+
+    it('reserves Office-like title space above clustered column plot area (oracle-pypptx-chart-0002)', () => {
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        seriesName: 'Profit/Loss',
+        valAxDeleted: false,
+        categories: ['Jan', 'Feb', 'Mar'],
+        values: [15, -8, 22],
+      });
+
+      const { option } = parseChartOption(xml);
+      const grid = option.grid as any;
+
+      expect((option.title as any)?.text).toBe('Profit/Loss');
+      expect(grid.top).toBe(68);
+    });
+
+    it('uses Office-like default grid margins for horizontal clustered bar charts (oracle-pypptx-chart-0005)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="0"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="bar"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Headcount</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="5"/>
+                  <c:pt idx="0"><c:v>Engineering</c:v></c:pt>
+                  <c:pt idx="1"><c:v>Sales</c:v></c:pt>
+                  <c:pt idx="2"><c:v>Marketing</c:v></c:pt>
+                  <c:pt idx="3"><c:v>Support</c:v></c:pt>
+                  <c:pt idx="4"><c:v>HR</c:v></c:pt>
+                </c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="5"/>
+                  <c:pt idx="0"><c:v>45</c:v></c:pt>
+                  <c:pt idx="1"><c:v>32</c:v></c:pt>
+                  <c:pt idx="2"><c:v>18</c:v></c:pt>
+                  <c:pt idx="3"><c:v>25</c:v></c:pt>
+                  <c:pt idx="4"><c:v>8</c:v></c:pt>
+                </c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const grid = option.grid as any;
+
+      expect(grid.left).toBe(10);
+      expect(grid.right).toBe(28);
     });
 
     it('uses PowerPoint-like automatic value axis range for line charts (oracle-pypptx-chart-0007)', () => {
@@ -4762,6 +4841,35 @@ describe('ChartRenderer', () => {
       expect(yAxis.interval).toBe(0.5);
       expect((option.legend as any).icon).toBe('circle');
     });
+
+    it('does not add extra title offset to bubble plot area grid (oracle-pypptx-chart-0020)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:autoTitleDeleted val="0"/>
+            <c:plotArea>
+              <c:bubbleChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Markets</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:xVal><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>1.5</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                  <c:yVal><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>2.5</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+                  <c:bubbleSize><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>10</c:v></c:pt></c:numCache></c:numRef></c:bubbleSize>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:bubbleChart>
+              <c:valAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const grid = option.grid as any;
+
+      expect(grid.top).toBe(68);
+    });
   });
 
   // ==========================================================================
@@ -5325,7 +5433,7 @@ describe('ChartRenderer', () => {
       expect(series.itemStyle).toBeUndefined();
       expect(series.data[0]).toMatchObject({
         value: 15,
-        itemStyle: { color: '#4472C4' },
+        itemStyle: { color: '#3c64ac' },
       });
       expect(series.data[1]).toMatchObject({
         value: -8,
@@ -5333,7 +5441,7 @@ describe('ChartRenderer', () => {
       });
       expect(series.data[2]).toMatchObject({
         value: 22,
-        itemStyle: { color: '#A5A5A5' },
+        itemStyle: { color: '#919191' },
       });
       const yAxis = option.yAxis as any;
       expect(yAxis.min).toBe(-15);
@@ -5478,6 +5586,74 @@ describe('ChartRenderer', () => {
       expect(series.showSymbol).toBe(true);
       expect(series.symbol).toBe('diamond');
       expect(series.symbolSize).toBeCloseTo(6.667, 3);
+    });
+
+    it('adds one Office-like tick of headroom when line data nearly reaches the nice max (oracle-pypptx-chart-0008)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:lineChart>
+              <c:grouping val="standard"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Actual</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>W1</c:v></c:pt><c:pt idx="1"><c:v>W2</c:v></c:pt><c:pt idx="2"><c:v>W3</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>82</c:v></c:pt><c:pt idx="1"><c:v>90</c:v></c:pt><c:pt idx="2"><c:v>96</c:v></c:pt></c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:marker val="1"/>
+              <c:smooth val="0"/>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:lineChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const yAxis = option.yAxis as any;
+
+      expect(yAxis.interval).toBe(20);
+      expect(yAxis.max).toBe(120);
+    });
+
+    it('uses chart-level line markers in legend icons when series markers are omitted (oracle-pypptx-chart-0008)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:lineChart>
+              <c:grouping val="standard"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Actual</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>W1</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>82</c:v></c:pt></c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:marker val="1"/>
+              <c:smooth val="0"/>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:lineChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+          <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const legend = option.legend as any;
+
+      expect(legend.data[0]).toMatchObject({
+        name: 'Actual',
+        icon: expect.stringMatching(/^path:\/\//),
+        marker: 'diamond',
+      });
     });
 
     it('does not infer a scatter chart title when autoTitleDeleted is omitted (oracle-pypptx-chart-0017)', () => {
@@ -5824,6 +6000,41 @@ describe('ChartRenderer', () => {
       expect(xAxis.boundaryGap).toBe(false);
       expect(yAxis.interval).toBe(2);
       expect(yAxis.max).toBe(14);
+    });
+
+    it('uses PowerPoint-like axis headroom for standard area charts (oracle-pypptx-chart-0014)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:plotArea>
+            <c:areaChart>
+              <c:grouping val="standard"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>2023</c:v></c:pt><c:pt idx="1"><c:v>2024</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>125</c:v></c:pt><c:pt idx="1"><c:v>148</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:ser>
+                <c:idx val="1"/><c:order val="1"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Cost</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>2023</c:v></c:pt><c:pt idx="1"><c:v>2024</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>82</c:v></c:pt><c:pt idx="1"><c:v>91</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:areaChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const yAxis = option.yAxis as any;
+
+      expect(yAxis.interval).toBe(20);
+      expect(yAxis.max).toBe(160);
     });
 
     it('keeps line chart category axes gapped while stacking series values', () => {

@@ -1155,7 +1155,7 @@ function legendIsAtTop(legendInfo: LegendInfo | undefined): boolean {
 function getGridTopPx(hasTitle: boolean, legendInfo: LegendInfo | undefined): number {
   const atTop = legendIsAtTop(legendInfo);
   const overlayLegend = legendInfo?.overlay ?? false;
-  if (hasTitle) return atTop && !overlayLegend ? 52 : 40;
+  if (hasTitle) return atTop && !overlayLegend ? 52 : 68;
   return atTop && !overlayLegend ? 32 : 20;
 }
 
@@ -1227,9 +1227,9 @@ function getGridBottomPx(legendInfo: LegendInfo | undefined): number {
       return 35;
     }
   }
-  return 8;
+  return 20;
 }
-const _GRID_BOTTOM_PX = 8; // kept as default for chart types that don't call the function
+const _GRID_BOTTOM_PX = 20; // kept as default for chart types that don't call the function
 
 /** Map OOXML c:marker > c:symbol values to ECharts symbol names. */
 const OOXML_SYMBOL_MAP: Record<string, string> = {
@@ -1846,10 +1846,20 @@ function applyAreaAxisRange(
   if (values.length === 0) return;
   const dataMin = Math.min(...values);
   const dataMax = Math.max(...values);
-  const interval = niceAxisInterval(dataMax, dataMin, 7);
+  const interval = niceAxisInterval(dataMax, dataMin, 8);
   if (axisDef.min === undefined && dataMin >= 0) axisDef.min = 0;
   if (axisDef.interval === undefined) axisDef.interval = interval;
-  if (axisDef.max === undefined) axisDef.max = Math.ceil(dataMax / interval) * interval + interval;
+  if (axisDef.max === undefined) {
+    if (stacked) {
+      axisDef.max = Math.ceil(dataMax / interval) * interval + interval;
+    } else {
+      let max = niceAxisMax(dataMax, dataMin, 8);
+      if (max > dataMax && max - dataMax < interval * 0.25) {
+        max += interval;
+      }
+      axisDef.max = max;
+    }
+  }
 }
 
 function mapPieLabelPosition(pos: string | undefined): 'inside' | 'outside' {
@@ -2014,7 +2024,7 @@ function buildBarChartOption(
   const varyColors = varyColorsNode.exists()
     ? parseOoxmlBoolElement(varyColorsNode)
     : defaultVaryColors;
-  const pointPalette = getThemeAccentPalette(ctx);
+  const pointPalette = getVaryColorPointPalette(ctx);
 
   // Parse data labels: in OOXML they can be on chart type (barChart) or on series (ser); try both
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
@@ -2127,7 +2137,7 @@ function buildBarChartOption(
             },
           }
         : {}),
-      barGap: overlap !== undefined ? `${-overlap}%` : undefined,
+      barGap: overlap !== undefined ? `${-overlap}%` : '0%',
       // OOXML gapWidth = gap-between-groups / single-bar-width × 100.
       // For N clustered bars: categoryBand = N × barWidth + gap, gap = gapWidth/100 × barWidth.
       // ECharts barCategoryGap = gap / categoryBand = gapWidth / (100×N + gapWidth).
@@ -2170,8 +2180,8 @@ function buildBarChartOption(
   const gridTop = getGridTopPx(!!title, legendInfo);
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
   // When value axis is hidden, reduce left/right padding so bars use full width
-  const gridLeft = valueAxis.deleted && !isHorizontal ? 4 : 10;
-  const gridRight = 10;
+  const gridLeft = isHorizontal ? 10 : valueAxis.deleted ? 4 : 24;
+  const gridRight = isHorizontal ? 28 : 10;
   // Determine a shared format code for tooltips: prefer axis numFmt, then first series formatCode
   const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
   const gridBottom = getGridBottomPx(legendInfo);
@@ -2366,7 +2376,7 @@ function buildLineChartOption(
 
   const gridTop = getGridTopPx(!!title, legendInfo);
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  const gridLeft = valueAxis.deleted ? 4 : 10;
+  const gridLeft = valueAxis.deleted ? 4 : 24;
   const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
   const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
@@ -2401,9 +2411,9 @@ function buildLineChartOption(
       isArea
         ? seriesArr.map((s) => s.name)
         : seriesArr.map((s) => {
-            const icon = mapOoxmlSymbol(s.markerSymbol);
-            return icon && icon !== 'none'
-              ? { name: s.name, icon }
+            const marker = mapOoxmlSymbol(s.markerSymbol ?? chartMarkerSymbol);
+            return marker && marker !== 'none'
+              ? { name: s.name, icon: lineLegendIconPath(), marker }
               : { name: s.name, icon: lineLegendIconPath() };
           }),
       legendTextStyle,
@@ -2685,7 +2695,12 @@ function buildRadarChartOption(
       }),
       legendTextStyle,
     ),
-    radar: { indicator, radius: radarRadius, center: radarCenter },
+    radar: {
+      indicator,
+      radius: radarRadius,
+      center: radarCenter,
+      splitArea: { show: false },
+    },
     series: [
       {
         type: 'radar' as const,
@@ -2782,7 +2797,7 @@ function buildScatterChartOption(
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
   const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
-  const scatterGridTop = title ? gridTop + 12 : gridTop;
+  const scatterGridTop = gridTop;
   const scatterGridBottom = Math.max(getGridBottomPx(legendInfo), 20);
 
   const xAxisDef: Record<string, unknown> = { type: 'value' };
@@ -2914,7 +2929,7 @@ function buildBubbleChartOption(
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
   const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
-  const scatterGridTop = title ? gridTop + 12 : gridTop;
+  const scatterGridTop = gridTop;
   const scatterGridBottom = Math.max(getGridBottomPx(legendInfo), 20);
 
   const xAxisDef: Record<string, unknown> = { type: 'value' };
@@ -3447,6 +3462,20 @@ function getThemeAccentPalette(ctx: RenderContext): string[] {
     .map((hex) => (hex.startsWith('#') ? hex : `#${hex}`));
 }
 
+function darkenHexColor(hex: string, factor: number): string {
+  const cleaned = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return hex;
+  const channel = (start: number): number =>
+    Math.max(0, Math.min(255, Math.round(parseInt(cleaned.slice(start, start + 2), 16) * factor)));
+  return `#${[channel(0), channel(2), channel(4)]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function getVaryColorPointPalette(ctx: RenderContext): string[] {
+  return getThemeAccentPalette(ctx).map((color) => darkenHexColor(color, 0.88));
+}
+
 function buildChartPalette(
   chartXml: SafeXmlNode,
   ctx: RenderContext,
@@ -3818,7 +3847,11 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
 
       // Only set max when not already specified
       if (ax.max === undefined) {
-        ax.max = niceAxisMax(dataMax, dataMin, desiredTicks);
+        let max = niceAxisMax(dataMax, dataMin, desiredTicks);
+        if (max > dataMax && max - dataMax < interval * 0.25) {
+          max += interval;
+        }
+        ax.max = max;
       }
       // Set min to 0 when all values are non-negative and no explicit min
       if (ax.min === undefined && dataMin >= 0) {
