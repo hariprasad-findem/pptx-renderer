@@ -237,16 +237,10 @@ function getEffectiveTableStyleTextProps(
       if (fontRef.exists()) {
         const idx = fontRef.attr('idx');
         if (idx === 'major') {
-          const fontStack = resolveThemeFontStack(
-            [ctx.theme.majorFont.latin, ctx.theme.majorFont.ea, ctx.theme.majorFont.cs],
-            ctx,
-          );
+          const fontStack = resolveThemeFontStack(['+mj-lt', '+mj-ea', '+mj-cs'], ctx);
           if (fontStack.length > 0) props.fontFamily = fontStack;
         } else if (idx === 'minor') {
-          const fontStack = resolveThemeFontStack(
-            [ctx.theme.minorFont.latin, ctx.theme.minorFont.ea, ctx.theme.minorFont.cs],
-            ctx,
-          );
+          const fontStack = resolveThemeFontStack(['+mn-lt', '+mn-ea', '+mn-cs'], ctx);
           if (fontStack.length > 0) props.fontFamily = fontStack;
         }
       }

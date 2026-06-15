@@ -16,6 +16,7 @@ export interface SlideVisualMetricFields {
 
 export interface ServerPerSlideMetrics {
   slideIdx: number;
+  hidden?: boolean;
   ssim?: number | null;
   mae?: number | null;
   fgIou?: number | null;
@@ -29,6 +30,28 @@ function normalizeNonNegativeInt(value: number): number {
   if (!Number.isFinite(value)) return 0;
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : 0;
+}
+
+export interface ComparableSlideInfo {
+  hidden?: boolean;
+}
+
+/**
+ * Map PPTX slide indexes to exported PDF page indexes.
+ * PowerPoint PDF export skips hidden slides, so slides after a hidden slide
+ * should compare against the next visible PDF page rather than the same index.
+ */
+export function resolveComparablePdfPages(
+  slides: readonly ComparableSlideInfo[],
+  pdfPageCount: number,
+): (number | null)[] {
+  const pageCount = normalizeNonNegativeInt(pdfPageCount);
+  let nextPdfPage = 0;
+  return slides.map((slide) => {
+    if (slide.hidden) return null;
+    if (nextPdfPage >= pageCount) return null;
+    return nextPdfPage++;
+  });
 }
 
 /**
@@ -58,6 +81,20 @@ export function mergeServerMetricsIntoSlides<T extends MergeableSlide>(
 
   return slideResults.map((slide) => {
     const metrics = metricMap.get(slide.index);
+    if (metrics?.hidden) {
+      return {
+        ...slide,
+        hasComparablePdf: false,
+        ssim: null,
+        mae: null,
+        fgIou: null,
+        fgIouTolerant: null,
+        chamferScore: null,
+        colorHistCorr: null,
+        needsReview: null,
+        hasDiff: false,
+      };
+    }
     if (!slide.hasComparablePdf || !metrics || typeof metrics.ssim !== 'number') {
       return {
         ...slide,

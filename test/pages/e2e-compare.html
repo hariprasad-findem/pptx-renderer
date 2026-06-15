@@ -326,6 +326,7 @@
       import { computePanelScale } from '../../src/utils/previewScale.ts';
       import {
         mergeServerMetricsIntoSlides,
+        resolveComparablePdfPages,
         resolveCompareSlideCounts,
       } from '../../src/utils/e2eCompare.ts';
       import * as pdfjsLib from 'pdfjs-dist';
@@ -791,11 +792,12 @@
       // -----------------------------------------------------------------------
       // Structural analysis (in-browser, no Python needed)
       // -----------------------------------------------------------------------
-      function analyzeStructural(serialized, pdfTextsBySlide) {
+      function analyzeStructural(serialized, pdfTextsBySlide, pdfPageBySlide) {
         const results = [];
         for (let i = 0; i < serialized.slides.length; i++) {
           const slide = serialized.slides[i];
-          const pdfTexts = pdfTextsBySlide[i] || [];
+          const pdfPage = pdfPageBySlide?.[i] ?? i;
+          const pdfTexts = pdfPage === null ? [] : pdfTextsBySlide[pdfPage] || [];
 
           // Text coverage: compare words from serialized model vs PDF
           const modelWords = new Set();
@@ -931,10 +933,12 @@
             serialized.slideCount,
             pdfNumPages,
           );
+          const pdfPageBySlide = resolveComparablePdfPages(serialized.slides, pdfNumPages);
+          const mappedComparableSlideCount = pdfPageBySlide.filter((page) => page !== null).length;
           if (comparableSlideCount < slideCount) {
             log(
               'warn',
-              `Only first ${comparableSlideCount} slide(s) have matching PDF pages; remaining slides render as PPTX-only.`,
+              `Only ${mappedComparableSlideCount} visible slide(s) have matching PDF pages; hidden or overflow slides render as PPTX-only.`,
             );
           }
 
@@ -968,7 +972,7 @@
 
           // Structural analysis
           log('info', 'Running structural analysis…');
-          const structural = analyzeStructural(serialized, pdfTextsBySlide);
+          const structural = analyzeStructural(serialized, pdfTextsBySlide, pdfPageBySlide);
 
           // Render PPTX slides — this triggers async EMF PDF rendering, which
           // will clobber PagesMapper.#pagesNumber, but we no longer need getPage.
@@ -1034,8 +1038,9 @@
           // Build per-slide results — use pre-rendered PDF canvases
           let slideResults = [];
           for (let i = 0; i < slideCount; i++) {
-            const hasComparablePdf = i < comparableSlideCount;
-            const pdfCanvas = hasComparablePdf ? pdfCanvases[i] || null : null;
+            const pdfPage = pdfPageBySlide[i];
+            const hasComparablePdf = pdfPage !== null;
+            const pdfCanvas = hasComparablePdf ? pdfCanvases[pdfPage] || null : null;
             const struct = structural[i] || {
               textCoverage: 0,
               shapeCount: 0,

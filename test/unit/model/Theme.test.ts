@@ -108,6 +108,41 @@ describe('parseTheme', () => {
     expect(theme.minorFont).toEqual({ latin: 'Verdana', ea: 'SimSun', cs: 'Courier' });
   });
 
+  it('preserves script-specific theme fonts when the ea slot is empty', () => {
+    const theme = parseTheme(parseXml(`
+      <theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <themeElements>
+          <clrScheme name="Office"/>
+          <fontScheme name="Office">
+            <majorFont>
+              <latin typeface="Arial Black"/>
+              <ea typeface=""/>
+              <cs typeface=""/>
+              <font script="Hans" typeface="Microsoft YaHei"/>
+              <font script="Jpan" typeface="Yu Gothic"/>
+            </majorFont>
+            <minorFont>
+              <latin typeface="Arial"/>
+              <ea typeface=""/>
+              <cs typeface=""/>
+              <font script="Hans" typeface="SimSun"/>
+            </minorFont>
+          </fontScheme>
+          <fmtScheme name="Office">
+            <fillStyleLst/>
+            <lnStyleLst/>
+            <effectStyleLst/>
+            <bgFillStyleLst/>
+          </fmtScheme>
+        </themeElements>
+      </theme>
+    `));
+
+    expect((theme.majorFont as any).scripts.Hans).toBe('Microsoft YaHei');
+    expect((theme.majorFont as any).scripts.Jpan).toBe('Yu Gothic');
+    expect((theme.minorFont as any).scripts.Hans).toBe('SimSun');
+  });
+
   it('parses fill styles', () => {
     const theme = parseTheme(makeThemeXml({ fillStyles: 3 }));
     expect(theme.fillStyles).toHaveLength(3);

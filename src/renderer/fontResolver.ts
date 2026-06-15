@@ -6,6 +6,7 @@ import type { RenderContext } from './RenderContext';
 
 type ThemeFontSlot = 'lt' | 'ea' | 'cs';
 type ThemeFontKey = 'latin' | 'ea' | 'cs';
+type LanguageHint = string | null | undefined;
 
 const THEME_FONT_REF = /^\+(mj|mn)-(lt|ea|cs)$/;
 const THEME_FONT_SLOT_MAP: Record<ThemeFontSlot, ThemeFontKey> = {
@@ -14,28 +15,80 @@ const THEME_FONT_SLOT_MAP: Record<ThemeFontSlot, ThemeFontKey> = {
   cs: 'cs',
 };
 
+const EAST_ASIAN_SCRIPT_FALLBACKS = ['Hans', 'Hant', 'Jpan', 'Hang'];
+
+function normalizeLanguageHints(hints?: LanguageHint | LanguageHint[]): string[] {
+  if (Array.isArray(hints)) {
+    return hints.filter((hint): hint is string => typeof hint === 'string' && hint.length > 0);
+  }
+  return typeof hints === 'string' && hints.length > 0 ? [hints] : [];
+}
+
+function scriptFromLanguage(lang: string): string | undefined {
+  const normalized = lang.toLowerCase();
+  if (normalized.startsWith('zh')) {
+    return /-(tw|hk|mo)\b/.test(normalized) ? 'Hant' : 'Hans';
+  }
+  if (normalized.startsWith('ja')) return 'Jpan';
+  if (normalized.startsWith('ko')) return 'Hang';
+  if (normalized.startsWith('ar')) return 'Arab';
+  if (normalized.startsWith('he')) return 'Hebr';
+  if (normalized.startsWith('th')) return 'Thai';
+  if (normalized.startsWith('hi') || normalized.startsWith('mr') || normalized.startsWith('ne')) {
+    return 'Deva';
+  }
+  return undefined;
+}
+
+function resolveScriptFont(
+  scripts: Record<string, string> | undefined,
+  hints?: LanguageHint | LanguageHint[],
+): string | undefined {
+  if (!scripts) return undefined;
+  for (const hint of normalizeLanguageHints(hints)) {
+    const script = scriptFromLanguage(hint);
+    if (script && scripts[script]) return scripts[script];
+  }
+  for (const script of EAST_ASIAN_SCRIPT_FALLBACKS) {
+    if (scripts[script]) return scripts[script];
+  }
+  return undefined;
+}
+
 /**
  * Resolve theme font placeholder references like "+mj-lt" or "+mn-ea".
  */
-export function resolveThemeFont(typeface: string, ctx: RenderContext): string {
+export function resolveThemeFont(
+  typeface: string,
+  ctx: RenderContext,
+  languageHints?: LanguageHint | LanguageHint[],
+): string {
   const match = typeface.match(THEME_FONT_REF);
   if (!match) return typeface;
 
   const scheme = match[1];
   const slot = match[2] as ThemeFontSlot;
   const fonts = scheme === 'mj' ? ctx.theme.majorFont : ctx.theme.minorFont;
-  return fonts[THEME_FONT_SLOT_MAP[slot]] || fonts.latin || fonts.ea || fonts.cs || typeface;
+  const key = THEME_FONT_SLOT_MAP[slot];
+  const direct = fonts[key];
+  if (direct) return direct;
+  if (slot === 'ea') {
+    const scriptFont = resolveScriptFont(fonts.scripts, languageHints);
+    if (scriptFont) return scriptFont;
+  }
+  return fonts.latin || fonts.ea || fonts.cs || typeface;
 }
 
 export function resolveThemeFontStack(
   typefaces: (string | undefined)[],
   ctx: RenderContext,
+  languageHints?: LanguageHint | LanguageHint[],
 ): string[] {
   const seen = new Set<string>();
   const stack: string[] = [];
   for (const typeface of typefaces) {
     if (!typeface) continue;
-    const resolved = resolveThemeFont(typeface, ctx).trim();
+    const resolved = resolveThemeFont(typeface, ctx, languageHints).trim();
     if (!resolved) continue;
     const key = resolved.toLowerCase();
     if (seen.has(key)) continue;

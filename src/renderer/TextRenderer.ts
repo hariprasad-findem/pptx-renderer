@@ -399,12 +399,13 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
   // Font family. Office often writes separate Latin/East Asian typefaces in the
   // same run; keep them as a CSS fallback stack so CJK glyphs use the EA face.
   const fontFamilyStack: string[] = [];
+  const languageHints = [rPr.attr('lang'), rPr.attr('altLang')];
   for (const fontNodeName of ['latin', 'ea', 'cs'] as const) {
     const fontNode = rPr.child(fontNodeName);
     if (!fontNode.exists()) continue;
     const typeface = fontNode.attr('typeface');
     if (!typeface) continue;
-    fontFamilyStack.push(resolveThemeFont(typeface, ctx));
+    fontFamilyStack.push(resolveThemeFont(typeface, ctx, languageHints));
   }
   if (fontFamilyStack.length > 0) {
     target.fontFamily = fontFamilyStack[0];

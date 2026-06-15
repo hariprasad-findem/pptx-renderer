@@ -4,10 +4,17 @@
 
 import { SafeXmlNode } from '../parser/XmlParser';
 
+export interface ThemeFontInfo {
+  latin: string;
+  ea: string;
+  cs: string;
+  scripts?: Record<string, string>;
+}
+
 export interface ThemeData {
   colorScheme: Map<string, string>;
-  majorFont: { latin: string; ea: string; cs: string };
-  minorFont: { latin: string; ea: string; cs: string };
+  majorFont: ThemeFontInfo;
+  minorFont: ThemeFontInfo;
   fillStyles: SafeXmlNode[]; // from a:fillStyleLst children (indexed 1-based)
   bgFillStyles?: SafeXmlNode[]; // from a:bgFillStyleLst children (indexed 1001-based for bgRef)
   lineStyles: SafeXmlNode[]; // from a:lnStyleLst children (indexed 1-based)
@@ -49,13 +56,28 @@ function extractColor(node: SafeXmlNode): string | undefined {
 /**
  * Parse font info from a majorFont or minorFont node.
  * Extracts typeface attributes from latin, ea, and cs child elements.
+ * Office themes often leave <ea> empty and provide script-specific
+ * <font script="Hans" .../> entries instead; preserve those for font resolution.
  */
-function parseFontInfo(fontNode: SafeXmlNode): { latin: string; ea: string; cs: string } {
-  return {
+function parseFontInfo(fontNode: SafeXmlNode): ThemeFontInfo {
+  const scripts: Record<string, string> = {};
+  for (const font of fontNode.children('font')) {
+    const script = font.attr('script');
+    const typeface = font.attr('typeface');
+    if (script && typeface) {
+      scripts[script] = typeface;
+    }
+  }
+
+  const result: ThemeFontInfo = {
     latin: fontNode.child('latin').attr('typeface') ?? '',
     ea: fontNode.child('ea').attr('typeface') ?? '',
     cs: fontNode.child('cs').attr('typeface') ?? '',
   };
+  if (Object.keys(scripts).length > 0) {
+    result.scripts = scripts;
+  }
+  return result;
 }
 
 /**

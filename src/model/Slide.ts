@@ -14,6 +14,8 @@ export type SlideNode = RenderableNode;
 
 export interface SlideData {
   index: number;
+  /** True when p:sld@show is false/0; hidden slides stay addressable but are skipped by PDF exports. */
+  hidden?: boolean;
   nodes: SlideNode[];
   background?: SafeXmlNode;
   layoutIndex: string;
@@ -82,9 +84,11 @@ export function parseSlide(
 
   // --- showMasterSp: if false, layout/master shapes should not be rendered on this slide ---
   const showMasterSp = parseDefaultTrueBoolAttr(root.attr('showMasterSp'));
+  const hidden = !parseDefaultTrueBoolAttr(root.attr('show'));
 
   return {
     index,
+    hidden,
     nodes,
     background,
     layoutIndex,

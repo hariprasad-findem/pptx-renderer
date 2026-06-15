@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   mergeServerMetricsIntoSlides,
+  resolveComparablePdfPages,
   resolveCompareSlideCounts,
 } from '../../../src/utils/e2eCompare';
 
@@ -21,6 +22,23 @@ describe('resolveCompareSlideCounts', () => {
     const result = resolveCompareSlideCounts(-1, Number.NaN);
     expect(result.displaySlideCount).toBe(0);
     expect(result.comparableSlideCount).toBe(0);
+  });
+});
+
+describe('resolveComparablePdfPages', () => {
+  it('maps visible PPTX slides to PDF pages while skipping hidden slides', () => {
+    const pages = resolveComparablePdfPages(
+      [{ hidden: false }, { hidden: true }, { hidden: false }],
+      2,
+    );
+
+    expect(pages).toEqual([0, null, 1]);
+  });
+
+  it('returns null for visible slides without a remaining PDF page', () => {
+    const pages = resolveComparablePdfPages([{ hidden: false }, { hidden: false }], 1);
+
+    expect(pages).toEqual([0, null]);
   });
 });
 

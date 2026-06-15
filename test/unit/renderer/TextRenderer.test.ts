@@ -1113,6 +1113,39 @@ describe('TextRenderer — renderTextBody', () => {
       expect(span!.style.fontFamily).not.toContain('+mn-ea');
     });
 
+    it('uses script-specific Hans font for +mj-ea when the theme ea slot is empty', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '丰富的SAP客户经验',
+                properties: xmlNode(
+                  '<rPr lang="zh-CN" altLang="en-US"><latin typeface="+mj-ea"/><ea typeface="+mj-ea"/></rPr>',
+                ),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.theme.majorFont = {
+        latin: 'Arial Black',
+        ea: '',
+        cs: '',
+        scripts: { Hans: 'Microsoft YaHei' },
+      } as any;
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      const span = container.querySelector('span');
+
+      expect(span!.style.fontFamily).toContain('Microsoft YaHei');
+      expect(span!.style.fontFamily).not.toContain('Arial Black');
+      expect(span!.style.fontFamily).not.toContain('+mj-ea');
+    });
+
     it('resolves +mj-lt to theme major font', () => {
       const body = makeTextBody({
         paragraphs: [

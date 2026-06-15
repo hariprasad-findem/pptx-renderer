@@ -146,6 +146,15 @@ describe('serializePresentation', () => {
     expect(result.slides[0].nodes).toHaveLength(0);
   });
 
+  it('serializes hidden slide metadata', () => {
+    const pres = makePres([]);
+    pres.slides[0].hidden = true;
+
+    const result = serializePresentation(pres);
+
+    expect(result.slides[0].hidden).toBe(true);
+  });
+
   it('serializes shape node with text', () => {
     const shape: ShapeNodeData = {
       ...makeBase(),

@@ -275,6 +275,22 @@ describe('buildPresentation', () => {
     expect(pres.slides[1].index).toBe(1);
   });
 
+  it('marks slides with show="0" as hidden without dropping them', () => {
+    const files = makeMinimalFiles({
+      slides: new Map([
+        [
+          'ppt/slides/slide1.xml',
+          '<sld show="0"><cSld><spTree/></cSld></sld>',
+        ],
+      ]),
+    });
+
+    const pres = buildPresentation(files);
+
+    expect(pres.slides).toHaveLength(1);
+    expect(pres.slides[0].hidden).toBe(true);
+  });
+
   it('preserves sldIdLst ordering when relationship attributes use a non-r prefix', () => {
     const presXml = `
       <Presentation xmlns:rel="http://schemas.openxmlformats.org/officeDocument/2006/relationships">

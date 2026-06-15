@@ -216,6 +216,7 @@ function renderWarpedTextBody(node: ShapeNodeData, ctx: RenderContext): SVGSVGEl
       rPr?.child('cs').attr('typeface'),
     ],
     ctx,
+    [rPr?.attr('lang'), rPr?.attr('altLang')],
   );
   const fontWeight = parseOoxmlBool(rPr?.attr('b')) ? 'bold' : undefined;
   const solidFill = rPr?.child('solidFill');

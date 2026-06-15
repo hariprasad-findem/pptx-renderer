@@ -998,7 +998,10 @@ function extractDefRPrStyle(defRPr: SafeXmlNode, ctx: RenderContext): ChartTextS
   const latinTypeface = defRPr.child('latin').attr('typeface');
   const eaTypeface = defRPr.child('ea').attr('typeface');
   const csTypeface = defRPr.child('cs').attr('typeface');
-  const fontStack = resolveThemeFontStack([latinTypeface, eaTypeface, csTypeface], ctx);
+  const fontStack = resolveThemeFontStack([latinTypeface, eaTypeface, csTypeface], ctx, [
+    defRPr.attr('lang'),
+    defRPr.attr('altLang'),
+  ]);
   if (fontStack.length > 0) {
     style.fontFamily = cssFontFamilyStack(fontStack);
   }
@@ -1042,15 +1045,7 @@ function extractTitleTextStyle(title: SafeXmlNode, ctx: RenderContext): ChartTex
 }
 
 function getChartThemeFontFamily(ctx: RenderContext): string | undefined {
-  const fontStack = resolveThemeFontStack(
-    [
-      ctx.theme.minorFont.latin,
-      ctx.theme.minorFont.ea,
-      ctx.theme.majorFont.latin,
-      ctx.theme.majorFont.ea,
-    ],
-    ctx,
-  );
+  const fontStack = resolveThemeFontStack(['+mn-lt', '+mn-ea', '+mj-lt', '+mj-ea'], ctx);
   return fontStack.length > 0 ? cssFontFamilyStack(fontStack) : undefined;
 }
 

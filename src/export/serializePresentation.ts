@@ -63,6 +63,7 @@ export interface SerializedNode {
 
 export interface SerializedSlide {
   index: number;
+  hidden?: boolean;
   nodes: SerializedNode[];
 }
 
@@ -210,6 +211,7 @@ export function serializePresentation(pres: PresentationData): SerializedPresent
 
       return {
         index: i,
+        hidden: slide.hidden,
         nodes: slide.nodes.map((node) =>
           serializeNode(node, slide.rels, slide.slidePath, pres.diagramDrawings, layout, master),
         ),
