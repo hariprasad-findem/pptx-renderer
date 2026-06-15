@@ -36,15 +36,13 @@ function parseDefaultTrueBoolAttr(value: string | undefined): boolean {
  * Check whether a shape node contains a placeholder definition.
  */
 function isPlaceholder(node: SafeXmlNode): boolean {
-  const nvSpPr = node.child('nvSpPr');
-  if (nvSpPr.exists()) {
-    const nvPr = nvSpPr.child('nvPr');
-    if (nvPr.child('ph').exists()) return true;
-  }
-  const nvPicPr = node.child('nvPicPr');
-  if (nvPicPr.exists()) {
-    const nvPr = nvPicPr.child('nvPr');
-    if (nvPr.child('ph').exists()) return true;
+  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
+    const nvWrapper = node.child(wrapper);
+    if (!nvWrapper.exists()) continue;
+    const nvPr = nvWrapper.child('nvPr');
+    if (nvPr.child('ph').exists()) {
+      return true;
+    }
   }
   return false;
 }
@@ -52,9 +50,8 @@ function isPlaceholder(node: SafeXmlNode): boolean {
 function getShapeXfrmInEmu(
   node: SafeXmlNode,
 ): { offX: number; offY: number; cx: number; cy: number } | null {
-  const spPr = node.child('spPr');
-  if (!spPr.exists()) return null;
-  const xfrm = spPr.child('xfrm');
+  const spPrXfrm = node.child('spPr').child('xfrm');
+  const xfrm = spPrXfrm.exists() ? spPrXfrm : node.child('xfrm');
   if (!xfrm.exists()) return null;
   const off = xfrm.child('off');
   const ext = xfrm.child('ext');

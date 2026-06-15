@@ -388,6 +388,37 @@ describe('parseOleFrameAsPicture', () => {
     expect(pic!.blipLink).toBe('rIdLinked');
   });
 
+  it('preserves OLE fallback picture source and crop metadata for rendering', () => {
+    const xml = parseXml(`
+      <graphicFrame xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <nvGraphicFramePr><cNvPr id="18" name="OLE"><hlinkClick r:id="rIdLink"/></cNvPr><nvPr/></nvGraphicFramePr>
+        <xfrm><off x="914400" y="914400"/><ext cx="1828800" cy="1828800"/></xfrm>
+        <graphic>
+          <graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">
+            <oleObj>
+              <pic>
+                <nvPicPr><cNvPr id="19" name="DirectOlePic"/><nvPr/></nvPicPr>
+                <blipFill>
+                  <blip r:embed="rIdDirect"><alphaModFix amt="50000"/></blip>
+                  <srcRect l="10000" t="20000" r="30000" b="40000"/>
+                </blipFill>
+                <spPr/>
+              </pic>
+            </oleObj>
+          </graphicData>
+        </graphic>
+      </graphicFrame>
+    `);
+
+    const pic = parseOleFrameAsPicture(xml);
+
+    expect(pic).toBeDefined();
+    expect(pic!.position.x).toBeCloseTo(96, 0);
+    expect(pic!.hlinkClick?.rId).toBe('rIdLink');
+    expect(pic!.source.child('blipFill').child('blip').child('alphaModFix').exists()).toBe(true);
+    expect(pic!.crop).toEqual({ left: 0.1, top: 0.2, right: 0.3, bottom: 0.4 });
+  });
+
   it('extracts picture from direct OLE object fallback without AlternateContent wrapper', () => {
     const xml = parseXml(`
       <graphicFrame xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">

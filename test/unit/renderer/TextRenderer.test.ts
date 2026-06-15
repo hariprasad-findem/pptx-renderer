@@ -550,6 +550,33 @@ describe('TextRenderer — renderTextBody', () => {
       );
     });
 
+    it('centers hanging bullet lines as one inline unit (xcloud-solution slide 14)', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(
+              '<pPr marL="171450" indent="-171450" algn="ctr"><buChar char="•"/></pPr>',
+            ),
+            runs: [{ text: '低门槛应用开发' }],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      const para = container.children[0] as HTMLElement;
+      const bulletSpan = Array.from(para.querySelectorAll('span')).find((span) =>
+        span.textContent?.includes('•'),
+      ) as HTMLElement | undefined;
+
+      expect(para.style.textAlign).toBe('center');
+      expect(para.style.paddingLeft).toBe('0px');
+      expect(para.style.textIndent).toBe('0px');
+      expect(bulletSpan).toBeDefined();
+      expect(bulletSpan!.style.position).not.toBe('absolute');
+      expect(bulletSpan!.style.display).toBe('inline-block');
+      expect(parseFloat(bulletSpan!.style.width)).toBeCloseTo(18, 1);
+    });
+
     it('applies absolute bullet size from buSzPts', () => {
       const body = makeTextBody({
         paragraphs: [

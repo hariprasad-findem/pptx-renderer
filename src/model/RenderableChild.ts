@@ -88,17 +88,14 @@ export function parseOleFrameAsPicture(graphicFrame: SafeXmlNode): PicNodeData |
   if (!pic) return undefined;
 
   const base = parseBaseProps(graphicFrame);
-  const blip = pic.child('blipFill').child('blip');
-  const blipEmbed = blip.attr('embed') ?? blip.attr('r:embed');
-  const blipLink = blip.attr('link') ?? blip.attr('r:link');
-  if (!blipEmbed && !blipLink) return undefined;
+  const fallbackPic = parsePicNode(pic);
+  if (!fallbackPic.blipEmbed && !fallbackPic.blipLink) return undefined;
 
   return {
+    ...fallbackPic,
     ...base,
     nodeType: 'picture',
-    blipEmbed,
-    blipLink,
-    source: graphicFrame,
+    source: pic,
   };
 }
 

@@ -372,68 +372,22 @@ function getPhInfo(phNode: SafeXmlNode): { type?: string; idx?: number } {
  * Extract xfrm position/size from a raw placeholder XML node.
  */
 function getPhXfrm(phNode: SafeXmlNode): { position: Position; size: Size } | undefined {
-  // Try spPr > xfrm first (most shapes)
-  const spPr = phNode.child('spPr');
-  if (spPr.exists()) {
-    const xfrm = spPr.child('xfrm');
-    if (xfrm.exists()) {
-      const off = xfrm.child('off');
-      const ext = xfrm.child('ext');
-      const x = off.numAttr('x');
-      const cx = ext.numAttr('cx');
-      if (x !== undefined && cx !== undefined) {
-        return {
-          position: { x: emuToPx(off.numAttr('x') ?? 0), y: emuToPx(off.numAttr('y') ?? 0) },
-          size: { w: emuToPx(ext.numAttr('cx') ?? 0), h: emuToPx(ext.numAttr('cy') ?? 0) },
-        };
-      }
+  // Try spPr > xfrm first (most shapes), then direct xfrm (graphic frames).
+  const spPrXfrm = phNode.child('spPr').child('xfrm');
+  const xfrm = spPrXfrm.exists() ? spPrXfrm : phNode.child('xfrm');
+  if (xfrm.exists()) {
+    const off = xfrm.child('off');
+    const ext = xfrm.child('ext');
+    const x = off.numAttr('x');
+    const cx = ext.numAttr('cx');
+    if (x !== undefined && cx !== undefined) {
+      return {
+        position: { x: emuToPx(off.numAttr('x') ?? 0), y: emuToPx(off.numAttr('y') ?? 0) },
+        size: { w: emuToPx(ext.numAttr('cx') ?? 0), h: emuToPx(ext.numAttr('cy') ?? 0) },
+      };
     }
   }
   return undefined;
-}
-
-/**
- * Find a matching placeholder node by type and idx.
- * Matching rules (based on OOXML spec):
- * 1. Exact match on type AND idx
- * 2. Match on type only (if idx is undefined or not found)
- * 3. For "body" type, also check idx match only
- */
-function findMatchingPlaceholder(
-  placeholders: SafeXmlNode[],
-  type?: string,
-  idx?: number,
-): SafeXmlNode | undefined {
-  let typeMatch: SafeXmlNode | undefined;
-
-  for (const ph of placeholders) {
-    const info = getPhInfo(ph);
-
-    // Exact match (type + idx)
-    if (type !== undefined && info.type === type && idx !== undefined && info.idx === idx) {
-      return ph;
-    }
-
-    // Type-only match
-    if (type !== undefined && info.type === type) {
-      if (!typeMatch) typeMatch = ph;
-    }
-
-    // idx-only match (for body/content placeholders that may omit type)
-    if (idx !== undefined && info.idx === idx && type === undefined && info.type === undefined) {
-      return ph;
-    }
-  }
-
-  // For placeholders without type (defaults to "body"), match by idx
-  if (type === undefined && idx !== undefined) {
-    for (const ph of placeholders) {
-      const info = getPhInfo(ph);
-      if (info.idx === idx) return ph;
-    }
-  }
-
-  return typeMatch;
 }
 
 /**
@@ -465,6 +419,10 @@ function findMatchingLayoutPlaceholder(
     }
   }
   return typeMatch;
+}
+
+function getMasterPlaceholderEntries(master: MasterData): PlaceholderEntry[] {
+  return master.placeholderEntries ?? master.placeholders.map((node) => ({ node }));
 }
 
 /**
@@ -545,9 +503,13 @@ export function resolveNodePlaceholderInheritance(
   if (!node.placeholder) return;
 
   const { type, idx } = node.placeholder;
-  const findMasterMatch = (): SafeXmlNode | undefined =>
+  const findMasterMatch = (): PlaceholderEntry | undefined =>
     master
-      ? findMatchingPlaceholder(master.placeholders, node.placeholder?.type ?? type, idx)
+      ? findMatchingLayoutPlaceholder(
+          getMasterPlaceholderEntries(master),
+          node.placeholder?.type ?? type,
+          idx,
+        )
       : undefined;
   const sizeIsEmpty = node.size.w === 0 && node.size.h === 0;
   const positionLooksDefault = node.position.y < 5; // y=0 or near top → use layout position
@@ -579,7 +541,13 @@ export function resolveNodePlaceholderInheritance(
       if (rawXfrm) {
         const masterMatch = findMasterMatch();
         if (masterMatch) {
-          inheritPlaceholderType(node.placeholder, masterMatch);
+          inheritPlaceholderType(node.placeholder, masterMatch.node);
+          if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
+            const masterBodyPr = getPhBodyPr(masterMatch.node);
+            if (masterBodyPr) {
+              node.textBody.layoutBodyProperties = masterBodyPr;
+            }
+          }
         }
         return;
       }
@@ -588,9 +556,9 @@ export function resolveNodePlaceholderInheritance(
 
   const masterMatch = findMasterMatch();
   if (masterMatch) {
-    inheritPlaceholderType(node.placeholder, masterMatch);
+    inheritPlaceholderType(node.placeholder, masterMatch.node);
 
-    const rawXfrm = getPhXfrm(masterMatch);
+    const rawXfrm = masterMatch.absoluteXfrm ?? getPhXfrm(masterMatch.node);
     if (rawXfrm) {
       const xfrm = resolveInheritedXfrm(rawXfrm, options);
       if (sizeIsEmpty) {
@@ -603,7 +571,7 @@ export function resolveNodePlaceholderInheritance(
 
     // Inherit bodyPr from master placeholder as fallback
     if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
-      const masterBodyPr = getPhBodyPr(masterMatch);
+      const masterBodyPr = getPhBodyPr(masterMatch.node);
       if (masterBodyPr) {
         node.textBody.layoutBodyProperties = masterBodyPr;
       }

@@ -113,6 +113,25 @@ describe('parseLayout', () => {
     expect(layout.placeholders).toHaveLength(1);
   });
 
+  it('extracts placeholders from graphicFrame with direct xfrm', () => {
+    const layout = parseLayout(makeLayoutXml({
+      shapes: `
+        <graphicFrame>
+          <nvGraphicFramePr><cNvPr id="4" name="Chart"/><nvPr><ph type="chart" idx="2"/></nvPr></nvGraphicFramePr>
+          <xfrm><off x="914400" y="457200"/><ext cx="1828800" cy="914400"/></xfrm>
+          <graphic><graphicData/></graphic>
+        </graphicFrame>
+      `,
+    }));
+
+    expect(layout.placeholders).toHaveLength(1);
+    expect(layout.placeholders[0].absoluteXfrm).toBeDefined();
+    expect(layout.placeholders[0].absoluteXfrm!.position.x).toBeCloseTo(96, 0);
+    expect(layout.placeholders[0].absoluteXfrm!.position.y).toBeCloseTo(48, 0);
+    expect(layout.placeholders[0].absoluteXfrm!.size.w).toBeCloseTo(192, 0);
+    expect(layout.placeholders[0].absoluteXfrm!.size.h).toBeCloseTo(96, 0);
+  });
+
   it('skips non-placeholder shapes', () => {
     const layout = parseLayout(makeLayoutXml({
       shapes: `

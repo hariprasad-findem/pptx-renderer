@@ -4188,6 +4188,47 @@ describe('ChartRenderer', () => {
       const title = option.title as any;
       expect(title?.text).toBe('Title From Ref');
     });
+
+    it('preserves rich title line breaks in document order', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="0"/>
+          <c:title>
+            <c:tx>
+              <c:rich>
+                <a:bodyPr/><a:lstStyle/>
+                <a:p>
+                  <a:r><a:t>Revenue</a:t></a:r>
+                  <a:br/>
+                  <a:r><a:t>FY26</a:t></a:r>
+                </a:p>
+              </c:rich>
+            </c:tx>
+          </c:title>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/><c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>S</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>10</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+
+      expect(title?.text).toBe('Revenue\nFY26');
+    });
   });
 
   // ==========================================================================
@@ -4861,6 +4902,31 @@ describe('ChartRenderer', () => {
       expect(series[0].symbolSize([0, 0, 5])).toBeCloseTo(44.7214, 3);
       expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(77.4597, 3);
       expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(100, 3);
+    });
+
+    it('honors explicit bubbleScale=0 instead of falling back to default scale', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:bubbleChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:xVal><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                  <c:yVal><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>10</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+                  <c:bubbleSize><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>25</c:v></c:pt></c:numCache></c:numRef></c:bubbleSize>
+                </c:ser>
+                <c:bubbleScale val="0"/>
+              </c:bubbleChart>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(series.symbolSize([0, 0, 25])).toBe(0);
     });
 
     it('adds top axis headroom for large edge bubbles (oracle-pypptx-chart-0020)', () => {

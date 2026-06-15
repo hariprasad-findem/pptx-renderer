@@ -746,6 +746,73 @@ describe('buildPresentation', () => {
       expect(node.textBody.layoutBodyProperties).toBeDefined();
     });
 
+    it('falls back to master bodyPr when matching layout placeholder has none', () => {
+      const slideXml = `
+        <sld xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <cSld>
+            <spTree>
+              <sp>
+                <nvSpPr><cNvPr id="2" name="Body"/><nvPr><ph type="body" idx="1"/></nvPr></nvSpPr>
+                <spPr>
+                  <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+                  <prstGeom prst="rect"><avLst/></prstGeom>
+                </spPr>
+                <txBody>
+                  <bodyPr/>
+                  <p><r><t>Content</t></r></p>
+                </txBody>
+              </sp>
+            </spTree>
+          </cSld>
+        </sld>
+      `;
+      const layoutXml = `
+        <sldLayout>
+          <cSld>
+            <spTree>
+              <sp>
+                <nvSpPr><cNvPr id="3" name="Body Layout"/><nvPr><ph type="body" idx="1"/></nvPr></nvSpPr>
+                <spPr>
+                  <xfrm><off x="914400" y="914400"/><ext cx="7315200" cy="3657600"/></xfrm>
+                </spPr>
+              </sp>
+            </spTree>
+          </cSld>
+        </sldLayout>
+      `;
+      const masterXml = `
+        <sldMaster>
+          <clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"/>
+          <cSld>
+            <spTree>
+              <sp>
+                <nvSpPr><cNvPr id="4" name="Body Master"/><nvPr><ph type="body" idx="1"/></nvPr></nvSpPr>
+                <spPr>
+                  <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+                </spPr>
+                <txBody>
+                  <bodyPr anchor="ctr" lIns="91440"/>
+                  <p><r><t/></r></p>
+                </txBody>
+              </sp>
+            </spTree>
+          </cSld>
+        </sldMaster>
+      `;
+      const files = makeMinimalFiles({
+        slides: new Map([['ppt/slides/slide1.xml', slideXml]]),
+        slideLayouts: new Map([['ppt/slideLayouts/slideLayout1.xml', layoutXml]]),
+        slideMasters: new Map([['ppt/slideMasters/slideMaster1.xml', masterXml]]),
+      });
+
+      const pres = buildPresentation(files);
+      const node = pres.slides[0].nodes[0] as any;
+
+      expect(node.position.x).toBeCloseTo(96, 0);
+      expect(node.textBody.layoutBodyProperties).toBeDefined();
+      expect(node.textBody.layoutBodyProperties.attr('anchor')).toBe('ctr');
+    });
+
     it('inherits bodyPr from master when layout has no match', () => {
       const slideXml = `
         <sld xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -970,6 +1037,64 @@ describe('buildPresentation', () => {
       expect(node.size.w).toBeGreaterThan(0);
       expect(node.size.h).toBeGreaterThan(0);
       expect(node.position.x).toBeGreaterThan(0);
+    });
+
+    it('falls back to grouped master placeholders using slide-space coordinates', () => {
+      const slideXml = `
+        <sld xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <cSld>
+            <spTree>
+              <sp>
+                <nvSpPr><cNvPr id="2" name="Footer"/><nvPr><ph type="ftr" idx="11"/></nvPr></nvSpPr>
+                <spPr>
+                  <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+                  <prstGeom prst="rect"><avLst/></prstGeom>
+                </spPr>
+              </sp>
+            </spTree>
+          </cSld>
+        </sld>
+      `;
+      const layoutXml = `<sldLayout><cSld><spTree/></cSld></sldLayout>`;
+      const masterXml = `
+        <sldMaster>
+          <clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"/>
+          <cSld>
+            <spTree>
+              <grpSp>
+                <nvGrpSpPr><cNvPr id="20" name="Footer Group"/><cNvGrpSpPr/><nvPr/></nvGrpSpPr>
+                <grpSpPr>
+                  <xfrm>
+                    <off x="914400" y="914400"/>
+                    <ext cx="1828800" cy="914400"/>
+                    <chOff x="0" y="0"/>
+                    <chExt cx="914400" cy="914400"/>
+                  </xfrm>
+                </grpSpPr>
+                <sp>
+                  <nvSpPr><cNvPr id="21" name="Grouped Footer"/><nvPr><ph type="ftr" idx="11"/></nvPr></nvSpPr>
+                  <spPr>
+                    <xfrm><off x="228600" y="457200"/><ext cx="457200" cy="228600"/></xfrm>
+                  </spPr>
+                </sp>
+              </grpSp>
+            </spTree>
+          </cSld>
+        </sldMaster>
+      `;
+      const files = makeMinimalFiles({
+        slides: new Map([['ppt/slides/slide1.xml', slideXml]]),
+        slideLayouts: new Map([['ppt/slideLayouts/slideLayout1.xml', layoutXml]]),
+        slideMasters: new Map([['ppt/slideMasters/slideMaster1.xml', masterXml]]),
+      });
+
+      const pres = buildPresentation(files);
+      const node = pres.slides[0].nodes[0];
+
+      expect(node.position.x).toBeCloseTo(144, 0);
+      expect(node.position.y).toBeCloseTo(144, 0);
+      expect(node.size.w).toBeCloseTo(96, 0);
+      expect(node.size.h).toBeCloseTo(24, 0);
     });
 
     it('master fallback also inherits position when positionLooksDefault', () => {

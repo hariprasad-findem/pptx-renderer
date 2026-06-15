@@ -2803,24 +2803,103 @@ describe('ShapeRenderer', () => {
     const ctx = createMockRenderContext({
       slide: {
         ...mockCtx.slide,
-        rels: new Map([['rId1', { type: 'image', target: 'media/image1.png' }]]),
+        rels: new Map([['rId1', { type: 'image', target: '../media/image1.png' }]]),
       },
       presentation: {
         ...mockCtx.presentation,
-        media: new Map([['media/image1.png', new Uint8Array([137, 80, 78, 71])]]), // PNG header
+        media: new Map([['ppt/media/image1.png', new Uint8Array([137, 80, 78, 71])]]), // PNG header
       },
     });
     const el = renderShape(shapeNode, ctx);
     const svg = el.querySelector('svg');
     const defs = svg?.querySelector('defs');
     const image = svg?.querySelector('image');
-    // Image rendering requires valid blob URL setup
-    expect(image || !image).toBeTruthy(); // Either has image or correctly handles no blob URL
-    // Should have clip path if image is present
-    if (image) {
-      const clipPath = defs?.querySelector('clipPath');
-      expect(clipPath).toBeTruthy();
-    }
+
+    expect(image).not.toBeNull();
+    expect(image!.getAttribute('preserveAspectRatio')).toBe('none');
+    const clipPath = defs?.querySelector('clipPath');
+    expect(clipPath).toBeTruthy();
+  });
+
+  it('honors non-zero stretch fillRect insets for shape blipFill images', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:nvSpPr><p:cNvPr id="206" name="InsetBlipShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:blipFill>
+            <a:blip r:embed="rId1"/>
+            <a:stretch><a:fillRect l="25000" t="10000" r="25000" b="10000"/></a:stretch>
+          </a:blipFill>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const mockCtx = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      slide: {
+        ...mockCtx.slide,
+        rels: new Map([['rId1', { type: 'image', target: '../media/image1.png' }]]),
+      },
+      presentation: {
+        ...mockCtx.presentation,
+        media: new Map([['ppt/media/image1.png', new Uint8Array([137, 80, 78, 71])]]),
+      },
+    });
+
+    const el = renderShape(shapeNode, ctx);
+    const image = el.querySelector('svg image');
+
+    expect(image).not.toBeNull();
+    expect(Number(image!.getAttribute('x'))).toBeCloseTo(shapeNode.size.w * 0.25, 3);
+    expect(Number(image!.getAttribute('y'))).toBeCloseTo(shapeNode.size.h * 0.1, 3);
+    expect(Number(image!.getAttribute('width'))).toBeCloseTo(shapeNode.size.w * 0.5, 3);
+    expect(Number(image!.getAttribute('height'))).toBeCloseTo(shapeNode.size.h * 0.8, 3);
+    expect(image!.getAttribute('preserveAspectRatio')).toBe('none');
+  });
+
+  it('preserves shape outline when rendering blipFill image fills', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <p:nvSpPr><p:cNvPr id="207" name="OutlinedBlipShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:blipFill>
+            <a:blip r:embed="rId1"/>
+            <a:stretch><a:fillRect/></a:stretch>
+          </a:blipFill>
+          <a:ln w="12700">
+            <a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const mockCtx = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      slide: {
+        ...mockCtx.slide,
+        rels: new Map([['rId1', { type: 'image', target: '../media/image1.png' }]]),
+      },
+      presentation: {
+        ...mockCtx.presentation,
+        media: new Map([['ppt/media/image1.png', new Uint8Array([137, 80, 78, 71])]]),
+      },
+    });
+
+    const el = renderShape(shapeNode, ctx);
+    const outlinePath = el.querySelector('svg > path');
+
+    expect(outlinePath).not.toBeNull();
+    expect(outlinePath!.getAttribute('fill')).toBe('none');
+    expect(outlinePath!.getAttribute('stroke')).toBe('#FF0000');
+    expect(Number(outlinePath!.getAttribute('stroke-width'))).toBeGreaterThan(0);
   });
 
   it('does not fall back to package media for disallowed external shape blipFill targets', () => {

@@ -227,6 +227,28 @@ describe('parseShapeNode', () => {
     expect(runs[3].text).toBe('3');
   });
 
+  it('preserves standalone tab elements in paragraph order', () => {
+    const s = shape(`
+      <sp>
+        <nvSpPr><cNvPr id="1" name="S"/><nvPr/></nvSpPr>
+        <spPr>
+          <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
+        </spPr>
+        <txBody>
+          <bodyPr/>
+          <p>
+            <r><t>Before</t></r>
+            <tab/>
+            <r><t>After</t></r>
+          </p>
+        </txBody>
+      </sp>
+    `);
+
+    const runs = s.textBody!.paragraphs[0].runs;
+    expect(runs.map((run) => run.text)).toEqual(['Before', '\t', 'After']);
+  });
+
   it('parses txXfrm for diagram text box bounds', () => {
     const s = shape(`
       <sp>

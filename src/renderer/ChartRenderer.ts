@@ -900,21 +900,27 @@ function extractTitleText(title: SafeXmlNode): string | undefined {
   const tx = title.child('tx');
   if (!tx.exists()) return undefined;
 
-  // Try rich text: tx > rich > p > r > t
+  // Try rich text: tx > rich > p, preserving runs, fields, breaks, and paragraph order.
   const rich = tx.child('rich');
   if (rich.exists()) {
-    const parts: string[] = [];
+    const paragraphs: string[] = [];
     for (const p of rich.children('p')) {
-      for (const r of p.children('r')) {
-        const t = r.child('t').text();
+      const parts: string[] = [];
+      for (const child of p.allChildren()) {
+        if (child.localName === 'br') {
+          parts.push('\n');
+          continue;
+        }
+        if (child.localName !== 'r' && child.localName !== 'fld') {
+          continue;
+        }
+        const t = child.child('t').text();
         if (t) parts.push(t);
       }
-      for (const fld of p.children('fld')) {
-        const t = fld.child('t').text();
-        if (t) parts.push(t);
-      }
+      const paragraph = parts.join('');
+      if (paragraph) paragraphs.push(paragraph);
     }
-    if (parts.length > 0) return parts.join('');
+    if (paragraphs.length > 0) return paragraphs.join('\n');
   }
 
   // Try strRef
@@ -2934,7 +2940,7 @@ function buildBubbleChartOption(
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
   const bubbleScale = Math.max(chartTypeNode.child('bubbleScale').numAttr('val') ?? 100, 0);
-  const maxBubbleDiameter = 100 * (bubbleScale / 100 || 1);
+  const maxBubbleDiameter = 100 * (bubbleScale / 100);
 
   // Bubble charts scale bubble area by value. In screen space that means diameter
   // should follow sqrt(value / maxValue), not a linear min-max interpolation.

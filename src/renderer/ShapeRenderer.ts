@@ -249,6 +249,34 @@ function resolveShapeBlipUrl(blipFill: SafeXmlNode, ctx: RenderContext): string 
   return getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
 }
 
+function pctAttr(node: SafeXmlNode, name: string): number {
+  return (node.numAttr(name) ?? 0) / 1000;
+}
+
+function getShapeBlipImagePlacement(
+  blipFill: SafeXmlNode,
+  bounds: { w: number; h: number },
+): { x: number; y: number; w: number; h: number; preserveAspectRatio: string } {
+  const stretch = blipFill.child('stretch');
+  if (!stretch.exists()) {
+    return { x: 0, y: 0, w: bounds.w, h: bounds.h, preserveAspectRatio: 'xMidYMid slice' };
+  }
+
+  const fillRect = stretch.child('fillRect');
+  const left = fillRect.exists() ? pctAttr(fillRect, 'l') : 0;
+  const top = fillRect.exists() ? pctAttr(fillRect, 't') : 0;
+  const right = fillRect.exists() ? pctAttr(fillRect, 'r') : 0;
+  const bottom = fillRect.exists() ? pctAttr(fillRect, 'b') : 0;
+
+  return {
+    x: bounds.w * (left / 100),
+    y: bounds.h * (top / 100),
+    w: bounds.w * ((100 - left - right) / 100),
+    h: bounds.h * ((100 - top - bottom) / 100),
+    preserveAspectRatio: 'none',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Line End Marker (Arrowhead) Helpers
 // ---------------------------------------------------------------------------
@@ -926,17 +954,45 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       clipPath.appendChild(clipPathPath);
       defs.appendChild(clipPath);
       const image = document.createElementNS(svgNs, 'image');
+      const placement = getShapeBlipImagePlacement(blipFill, { w: svgW, h: svgH });
       image.setAttributeNS('http://www.w3.org/1999/xlink', 'href', blipUrl);
-      image.setAttribute('x', '0');
-      image.setAttribute('y', '0');
-      image.setAttribute('width', String(svgW));
-      image.setAttribute('height', String(svgH));
+      image.setAttribute('x', String(placement.x));
+      image.setAttribute('y', String(placement.y));
+      image.setAttribute('width', String(placement.w));
+      image.setAttribute('height', String(placement.h));
       image.setAttribute('clip-path', `url(#${clipId})`);
-      image.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+      image.setAttribute('preserveAspectRatio', placement.preserveAspectRatio);
       svg.appendChild(defs);
       svg.appendChild(image);
+
+      const mainPathStrokeSuppressed = multiPaths && multiPaths[0]?.stroke === false;
+      if (
+        !isCircularArrow &&
+        !mainPathStrokeSuppressed &&
+        !gradientStroke &&
+        strokeWidth > 0 &&
+        strokeColor !== 'none' &&
+        strokeColor !== 'transparent'
+      ) {
+        const outlinePath = document.createElementNS(svgNs, 'path');
+        outlinePath.setAttribute('d', pathD);
+        outlinePath.setAttribute('fill', 'none');
+        outlinePath.setAttribute('stroke', strokeColor);
+        outlinePath.setAttribute('stroke-width', String(strokeWidth));
+        if (strokeLinecap) outlinePath.setAttribute('stroke-linecap', strokeLinecap);
+        if (strokeLinejoin) outlinePath.setAttribute('stroke-linejoin', strokeLinejoin);
+        const svgDashArray = svgDashArrayForKind(strokeDashKind, strokeWidth);
+        if (svgDashArray) {
+          outlinePath.setAttribute('stroke-dasharray', svgDashArray);
+        } else if (strokeDash === 'dashed') {
+          outlinePath.setAttribute('stroke-dasharray', `${strokeWidth * 4},${strokeWidth * 2}`);
+        } else if (strokeDash === 'dotted') {
+          outlinePath.setAttribute('stroke-dasharray', `${strokeWidth},${strokeWidth * 2}`);
+        }
+        svg.appendChild(outlinePath);
+      }
+
       wrapper.appendChild(svg);
-      // Skip path fill/stroke/markers — image replaces fill
     } else {
       // Create <defs> for gradients and markers
       const defs = document.createElementNS(svgNs, 'defs');

@@ -109,6 +109,10 @@ function parseParagraph(pNode: SafeXmlNode): TextParagraph {
         text: '\n',
         properties: rPr.exists() ? rPr : undefined,
       });
+    } else if (ln === 'tab') {
+      orderedRuns.push({
+        text: '\t',
+      });
     } else if (ln === 'fld') {
       const rPr = child.child('rPr');
       const tNode = child.child('t');

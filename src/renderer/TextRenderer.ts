@@ -925,13 +925,20 @@ export function renderTextBody(
       if (useHangingBulletGutter) {
         const markerLeft = Math.max(0, marginLeft + textIndent);
         const markerWidth = Math.max(0, marginLeft - markerLeft);
-        paraDiv.style.position = 'relative';
         paraDiv.style.textIndent = '0px';
-        bulletSpan.style.position = 'absolute';
-        bulletSpan.style.left = `${markerLeft}px`;
-        bulletSpan.style.top = '0px';
-        bulletSpan.style.width = `${markerWidth}px`;
-        bulletSpan.style.whiteSpace = 'pre';
+        if (merged.align === 'ctr' || merged.align === 'r') {
+          paraDiv.style.paddingLeft = '0px';
+          bulletSpan.style.display = 'inline-block';
+          bulletSpan.style.width = `${markerWidth}px`;
+          bulletSpan.style.whiteSpace = 'pre';
+        } else {
+          paraDiv.style.position = 'relative';
+          bulletSpan.style.position = 'absolute';
+          bulletSpan.style.left = `${markerLeft}px`;
+          bulletSpan.style.top = '0px';
+          bulletSpan.style.width = `${markerWidth}px`;
+          bulletSpan.style.whiteSpace = 'pre';
+        }
       }
       if (merged.bulletFont) {
         bulletSpan.style.fontFamily = cssFontFamilyStack(resolveThemeFont(merged.bulletFont, ctx));
