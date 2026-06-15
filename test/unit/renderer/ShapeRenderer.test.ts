@@ -1141,6 +1141,44 @@ describe('ShapeRenderer', () => {
     }
   });
 
+  it('keeps normal line spacing for large wrapped spAutoFit text (oracle-pypptx-text-0015-size-72pt)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="TextBox 1"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="914400" y="914400"/><a:ext cx="9144000" cy="2743200"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:r><a:rPr sz="7200"><a:latin typeface="Calibri"/></a:rPr><a:t>Font size 72pt sample text</a:t></a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (div) =>
+        div.textContent?.includes('Font size 72pt sample text') &&
+        div.style.flexDirection === 'column',
+    ) as HTMLElement | undefined;
+    const para = textContainer?.querySelector('div') as HTMLElement | null;
+    const span = textContainer?.querySelector('span') as HTMLElement | null;
+
+    expect(textContainer).toBeDefined();
+    expect(para?.style.lineHeight).toBe('');
+    expect(span?.style.fontSize).toBe('72pt');
+  });
+
   it('remeasures dynamic spAutoFit after fonts are ready to remove stale fallback-font scaling', async () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
@@ -2390,6 +2428,31 @@ describe('ShapeRenderer', () => {
     expect(path).toBeTruthy();
     expect(path?.getAttribute('fill')).toBe('none');
     expect(path?.getAttribute('stroke')).not.toBe('none');
+  });
+
+  it('keeps flowchart connector presets filled instead of treating them as connector lines', () => {
+    for (const preset of ['flowChartConnector', 'flowChartOffpageConnector']) {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr><p:cNvPr id="156" name="${preset}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="3000000" cy="2000000"/></a:xfrm>
+            <a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>
+          </p:spPr>
+          <p:style>
+            <a:lnRef idx="2"><a:schemeClr val="accent1"/></a:lnRef>
+            <a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef>
+            <a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef>
+            <a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>
+          </p:style>
+        </p:sp>
+      `;
+      const shapeNode = parseShapeNode(parseXml(xml));
+      const el = renderShape(shapeNode, createMockRenderContext());
+      const path = el.querySelector('path');
+      expect(path?.getAttribute('fill')).toBe('#4472C4');
+    }
   });
 
   it('renders shape with text body', () => {

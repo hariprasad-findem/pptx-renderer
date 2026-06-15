@@ -50,6 +50,11 @@ const DEFAULT_MAJOR_GRIDLINE_STYLE: Required<ChartLineStyle> = {
   width: 1,
   type: 'solid',
 };
+const DEFAULT_RADAR_GRIDLINE_STYLE: Required<ChartLineStyle> = {
+  color: '#868686',
+  width: 1,
+  type: 'solid',
+};
 const CHART_ACCENT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
 
 interface DataPointStyle {
@@ -1188,6 +1193,7 @@ function computePieLayout(
   legendInfo: LegendInfo | undefined,
   isDoughnut: boolean,
   showLabel: boolean,
+  holeSizePct = 50,
 ): { center: [string, string]; radius: [string, string] | string } {
   const placement = getLegendPlacement(legendInfo);
   let center: [string, string] = ['50%', '55%'];
@@ -1210,12 +1216,12 @@ function computePieLayout(
     return { center, radius: `${outerRadius}%` };
   }
 
-  const innerRadius = Math.round(outerRadius * 0.57);
+  const innerRadius = Math.round(outerRadius * (Math.min(Math.max(holeSizePct, 10), 90) / 100));
   return { center, radius: [`${innerRadius}%`, `${outerRadius}%`] };
 }
 
 function pieExplosionToOffset(explosion: number): number {
-  return Number((explosion * 4.4).toFixed(1));
+  return explosion;
 }
 
 /** Grid bottom in pixels — leave more room when the legend sits at the bottom. */
@@ -2488,7 +2494,8 @@ function buildPieChartOption(
           dataLabelShowsContent(mergeDataLabelConfig(meta.sharedLabels, override)),
         )),
   );
-  const pieLayout = computePieLayout(legendInfo, isDoughnut, showLabel);
+  const holeSizePct = isDoughnut ? (chartTypeNode.child('holeSize').numAttr('val') ?? 50) : 50;
+  const pieLayout = computePieLayout(legendInfo, isDoughnut, showLabel, holeSizePct);
 
   const series: echarts.PieSeriesOption[] = seriesLabelMeta.map((meta, idx) => {
     const manualLayouts = new Map<number, DataLabelManualLayout>();
@@ -2527,6 +2534,8 @@ function buildPieChartOption(
     const hasLeaderLines =
       Boolean(meta.sharedLabels?.showLeaderLines) ||
       [...meta.pointOverrides.values()].some((cfg) => cfg.showLeaderLines === true);
+    const selectedOffset =
+      meta.explosions && Math.max(...meta.explosions.map((exp) => pieExplosionToOffset(exp)));
 
     return {
       type: 'pie' as const,
@@ -2537,6 +2546,7 @@ function buildPieChartOption(
       center: pieLayout.center,
       data: pieData,
       selectedMode: meta.explosions ? 'multiple' : false,
+      ...(selectedOffset ? { selectedOffset } : {}),
       label: label ?? { show: false },
       labelLine: { show: hasLeaderLines },
       labelLayout: buildPieLabelLayout(manualLayouts),
@@ -2600,13 +2610,41 @@ function buildRadarChartOption(
     indicatorMax = valueAxis.max;
   } else {
     let maxVal = 0;
+    let minVal = 0;
     for (const s of seriesArr) {
       for (const v of s.values) {
         if (v > maxVal) maxVal = v;
+        if (v < minVal) minVal = v;
       }
     }
-    indicatorMax = Math.ceil(maxVal * 1.1) || 100;
+    const interval = niceAxisInterval(maxVal, minVal, 5);
+    indicatorMax = Math.ceil(maxVal / interval) * interval || 100;
   }
+
+  const showValueAxisLabels = !valueAxis.deleted && valueAxis.tickLblPos !== 'none';
+  const valueAxisLabel = showValueAxisLabels
+    ? {
+        show: true,
+        formatter: (val: number) => formatValue(val, valueAxis.numFmt),
+        ...(valueAxis.labelColor ? { color: valueAxis.labelColor } : {}),
+        ...(valueAxis.labelFontSize !== undefined ? { fontSize: valueAxis.labelFontSize } : {}),
+      }
+    : undefined;
+  const radarSplitLine = valueAxis.hasMajorGridlines
+    ? {
+        show: true,
+        lineStyle: {
+          ...DEFAULT_RADAR_GRIDLINE_STYLE,
+          ...(valueAxis.majorGridlineStyle ?? {}),
+        },
+      }
+    : { show: false };
+  const radarAxisLine = valueAxis.deleted
+    ? { show: false }
+    : {
+        show: true,
+        lineStyle: { color: valueAxis.lineColor ?? DEFAULT_RADAR_GRIDLINE_STYLE.color },
+      };
 
   // PowerPoint radar charts place categories clockwise from top,
   // but ECharts places indicators counterclockwise. To match PowerPoint,
@@ -2614,16 +2652,22 @@ function buildRadarChartOption(
   const cwCategories =
     categories.length > 1 ? [categories[0], ...categories.slice(1).reverse()] : categories;
 
-  const indicator = cwCategories.map((cat) => ({
+  const indicator = cwCategories.map((cat, index) => ({
     name: cat,
     max: indicatorMax,
+    ...(valueAxis.min !== undefined ? { min: valueAxis.min } : {}),
+    ...(index === 0 && valueAxisLabel ? { axisLabel: valueAxisLabel } : {}),
   }));
 
   // Read radar style to determine default marker behavior
   const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const radarHasTopLegend = legendIsAtTop(legendInfo) && !legendInfo?.overlay;
-  const radarCenter: [string, string] = radarHasTopLegend ? ['50%', '66%'] : ['50%', '55%'];
-  const radarRadius = !radarHasTopLegend && radarStyle === 'filled' ? '76%' : '58%';
+  const radarCenter: [string, string] = radarHasTopLegend
+    ? ['50%', '66%']
+    : radarStyle === 'filled'
+      ? ['50%', '55%']
+      : ['50%', '50%'];
+  const radarRadius = radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%';
 
   const radarData = seriesArr.map((s) => {
     // Reorder values to match the reversed category order
@@ -2699,6 +2743,9 @@ function buildRadarChartOption(
       indicator,
       radius: radarRadius,
       center: radarCenter,
+      splitNumber: 5,
+      splitLine: radarSplitLine,
+      axisLine: radarAxisLine,
       splitArea: { show: false },
     },
     series: [
@@ -2745,7 +2792,7 @@ function buildScatterChartOption(
     if (renderAsLine) {
       const shouldInterpolate = s.smooth ?? scatterStyleIsSmooth;
       const lineData = shouldInterpolate ? buildSmoothScatterLineData(data) : data;
-      const lineWidth = s.lineWidth ?? 4;
+      const lineWidth = s.lineWidth ?? 3;
       return {
         type: 'line' as const,
         name: s.name,
@@ -3510,6 +3557,9 @@ type RadarTextContainer = {
   name?: {
     textStyle?: Record<string, unknown>;
   };
+  indicator?: {
+    axisLabel?: Record<string, unknown>;
+  }[];
 };
 
 function getRadarNameTextStyles(option: echarts.EChartsOption): Record<string, unknown>[] {
@@ -3522,6 +3572,17 @@ function getRadarNameTextStyles(option: echarts.EChartsOption): Record<string, u
       const name = radar.name ?? (radar.name = {});
       return name.textStyle ?? (name.textStyle = {});
     });
+}
+
+function getRadarAxisLabelStyles(option: echarts.EChartsOption): Record<string, unknown>[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const opt = option as any;
+  const radars = (Array.isArray(opt.radar) ? opt.radar : opt.radar ? [opt.radar] : []) as unknown[];
+  return radars
+    .filter((radar): radar is RadarTextContainer => typeof radar === 'object' && radar !== null)
+    .flatMap((radar) => radar.indicator ?? [])
+    .map((indicator) => indicator.axisLabel)
+    .filter((axisLabel): axisLabel is Record<string, unknown> => !!axisLabel);
 }
 
 /**
@@ -3546,6 +3607,12 @@ function applyDefaultFontSizes(option: echarts.EChartsOption, defaultFs: number)
     const current = textStyle.fontSize;
     if (typeof current !== 'number' || current <= 10) {
       textStyle.fontSize = defaultFs;
+    }
+  }
+  for (const axisLabel of getRadarAxisLabelStyles(option)) {
+    const current = axisLabel.fontSize;
+    if (typeof current !== 'number' || current <= 10) {
+      axisLabel.fontSize = defaultFs;
     }
   }
 
@@ -3609,6 +3676,11 @@ function applyDefaultFontFamily(option: echarts.EChartsOption, fontFamily: strin
       textStyle.fontFamily = fontFamily;
     }
   }
+  for (const axisLabel of getRadarAxisLabelStyles(option)) {
+    if (!axisLabel.fontFamily) {
+      axisLabel.fontFamily = fontFamily;
+    }
+  }
 }
 
 function applyDefaultTextColors(option: echarts.EChartsOption): void {
@@ -3640,6 +3712,11 @@ function applyDefaultTextColors(option: echarts.EChartsOption): void {
   for (const textStyle of getRadarNameTextStyles(option)) {
     if (textStyle.color === undefined) {
       textStyle.color = DEFAULT_CHART_FOREGROUND_COLOR;
+    }
+  }
+  for (const axisLabel of getRadarAxisLabelStyles(option)) {
+    if (axisLabel.color === undefined) {
+      axisLabel.color = DEFAULT_CHART_FOREGROUND_COLOR;
     }
   }
 }

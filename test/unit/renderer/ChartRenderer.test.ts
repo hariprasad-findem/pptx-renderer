@@ -1722,8 +1722,8 @@ describe('ChartRenderer', () => {
       const series = option.series as any[];
       expect(series.length).toBeGreaterThan(0);
       expect(series[0].type).toBe('pie');
-      // doughnutChart should have radius property set
-      expect(series[0].radius).toBeDefined();
+      // holeSize is the inner radius as a percentage of the outer radius.
+      expect(series[0].radius).toEqual(['49%', '82%']);
     });
 
     it('should parse radarChart with categories and multiple series', () => {
@@ -1861,6 +1861,60 @@ describe('ChartRenderer', () => {
       expect(radarSeries.data[1].areaStyle).toBeUndefined();
     });
 
+    it('sizes marker radar charts like PowerPoint and shows radial value labels (oracle-pypptx-chart-0018)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1800"/></a:pPr></a:p></c:txPr>
+          <c:chart>
+            <c:autoTitleDeleted val="0"/>
+            <c:plotArea>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Player A</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:marker><c:symbol val="none"/></c:marker>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="5"/><c:pt idx="0"><c:v>Speed</c:v></c:pt><c:pt idx="1"><c:v>Power</c:v></c:pt><c:pt idx="2"><c:v>Agility</c:v></c:pt><c:pt idx="3"><c:v>Defense</c:v></c:pt><c:pt idx="4"><c:v>Stamina</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="5"/><c:pt idx="0"><c:v>85</c:v></c:pt><c:pt idx="1"><c:v>70</c:v></c:pt><c:pt idx="2"><c:v>90</c:v></c:pt><c:pt idx="3"><c:v>65</c:v></c:pt><c:pt idx="4"><c:v>75</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:ser>
+                  <c:idx val="1"/><c:order val="1"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Player B</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:marker><c:symbol val="none"/></c:marker>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="5"/><c:pt idx="0"><c:v>Speed</c:v></c:pt><c:pt idx="1"><c:v>Power</c:v></c:pt><c:pt idx="2"><c:v>Agility</c:v></c:pt><c:pt idx="3"><c:v>Defense</c:v></c:pt><c:pt idx="4"><c:v>Stamina</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="5"/><c:pt idx="0"><c:v>70</c:v></c:pt><c:pt idx="1"><c:v>85</c:v></c:pt><c:pt idx="2"><c:v>65</c:v></c:pt><c:pt idx="3"><c:v>80</c:v></c:pt><c:pt idx="4"><c:v>90</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:radarChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:majorGridlines/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const radar = option.radar as any;
+      const firstAxisLabel = radar.indicator[0].axisLabel;
+
+      expect(radar.center).toEqual(['50%', '50%']);
+      expect(radar.radius).toBe('86%');
+      expect(radar.splitNumber).toBe(5);
+      expect(radar.splitLine).toMatchObject({
+        show: true,
+        lineStyle: { color: '#868686', width: 1, type: 'solid' },
+      });
+      expect(radar.axisLine).toMatchObject({
+        show: true,
+        lineStyle: { color: '#868686' },
+      });
+      expect(firstAxisLabel.show).toBe(true);
+      expect(firstAxisLabel.formatter(20)).toBe('20');
+      expect(firstAxisLabel.fontSize).toBe(24);
+      expect(firstAxisLabel.color).toBe('#000000');
+      expect(radar.indicator[1].axisLabel).toBeUndefined();
+    });
+
     it('should parse scatterChart with xVal and yVal', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -1983,7 +2037,7 @@ describe('ChartRenderer', () => {
       expect(series?.showSymbol).toBe(false);
       expect(series?.lineStyle?.cap).toBe('round');
       expect(series?.lineStyle?.join).toBe('round');
-      expect(series?.lineStyle?.width).toBe(4);
+      expect(series?.lineStyle?.width).toBe(3);
       expect(series?.data?.length).toBeGreaterThan(3);
       expect(series?.data?.[0]).toEqual([0.7, 2.7]);
       expect(series?.data?.[series.data.length - 1]).toEqual([2.6, 0.8]);
@@ -4341,7 +4395,7 @@ describe('ChartRenderer', () => {
       expect(series?.type).toBe('pie');
       // First data point should have selected=true and selectedOffset
       expect(series?.data?.[0]?.selected).toBe(true);
-      expect(series?.data?.[0]?.selectedOffset).toBe(44);
+      expect(series?.data?.[0]?.selectedOffset).toBe(10);
       // selectedMode should allow exploded slices to remain selected together
       expect(series?.selectedMode).toBe('multiple');
     });
@@ -4380,9 +4434,10 @@ describe('ChartRenderer', () => {
       const series = (option.series as any[])?.[0];
       expect(series?.type).toBe('pie');
       expect(series?.selectedMode).toBe('multiple');
+      expect(series?.selectedOffset).toBe(25);
       expect(series?.data).toHaveLength(4);
       expect(series?.data.every((entry: any) => entry.selected === true)).toBe(true);
-      expect(series?.data.every((entry: any) => entry.selectedOffset === 110)).toBe(true);
+      expect(series?.data.every((entry: any) => entry.selectedOffset === 25)).toBe(true);
     });
 
     it('should preserve series-level explosion on pie charts without capping the offset', () => {
@@ -4420,7 +4475,7 @@ describe('ChartRenderer', () => {
       expect(series?.selectedMode).toBe('multiple');
       expect(series?.data).toHaveLength(4);
       expect(series?.data.every((entry: any) => entry.selected === true)).toBe(true);
-      expect(series?.data.every((entry: any) => entry.selectedOffset === 110)).toBe(true);
+      expect(series?.data.every((entry: any) => entry.selectedOffset === 25)).toBe(true);
     });
   });
 
@@ -5745,6 +5800,7 @@ describe('ChartRenderer', () => {
         [1, 8],
         [2, 6],
       ]);
+      expect(series.lineStyle.width).toBe(3);
     });
 
     it('renders lineChart series with noFill line as marker-only points', () => {
@@ -5897,7 +5953,10 @@ describe('ChartRenderer', () => {
       const { option } = parseChartOption(xml);
       const radar = option.radar as any;
       const radarSeries = (option.series as any[])[0];
+      expect(radar.center).toEqual(['50%', '55%']);
       expect(radar.radius).toBe('76%');
+      expect(radar.indicator.every((axis: any) => axis.max === 100)).toBe(true);
+      expect(radar.indicator[0].axisLabel.formatter(100)).toBe('100');
       expect(radarSeries.data[0].areaStyle.opacity).toBe(0.75);
       expect(radarSeries.data[0].symbol).toBe('none');
     });
@@ -6217,8 +6276,8 @@ describe('ChartRenderer', () => {
       const series = option.series as any[];
 
       expect(series).toHaveLength(2);
-      expect(series[0].radius).toEqual(['47%', '64%']);
-      expect(series[1].radius).toEqual(['65%', '82%']);
+      expect(series[0].radius).toEqual(['41%', '61%']);
+      expect(series[1].radius).toEqual(['62%', '82%']);
       expect((option.legend as any).data).toEqual(['A', 'B', 'C', 'D']);
     });
 

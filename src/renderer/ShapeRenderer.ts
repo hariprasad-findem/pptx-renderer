@@ -681,7 +681,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
     !!presetKey &&
     (presetKey === 'line' ||
       presetKey === 'lineinv' ||
-      presetKey.includes('connector') ||
+      presetKey.startsWith('straightconnector') ||
+      presetKey.startsWith('bentconnector') ||
+      presetKey.startsWith('curvedconnector') ||
       outlineOnlyPresets.has(presetKey));
   const isConnectorShape = node.source.localName === 'cxnSp';
   const flatExtent = (node.size.w > 0 && node.size.h < 1) || (node.size.w < 1 && node.size.h > 0);
@@ -1608,6 +1610,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       const hasNoAutofit = noAutofit?.exists();
       const bodyPr = node.textBody.bodyProperties;
       const fallbackBp = node.textBody.layoutBodyProperties;
+      const textWrap =
+        (bodyPr ? bodyPr.attr('wrap') : undefined) ??
+        (fallbackBp ? fallbackBp.attr('wrap') : undefined);
       const horzOverflow =
         (bodyPr ? bodyPr.attr('horzOverflow') : undefined) ??
         (fallbackBp ? fallbackBp.attr('horzOverflow') : undefined);
@@ -1674,6 +1679,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       let textAnchor: string | null | undefined;
       const isSingleLineSpAutoFit =
         !!hasSpAutoFit && !hasNormAutofit && isSingleLineTextBody(node.textBody);
+      const hasCenteredParagraphs = hasExplicitCenteredParagraph(node.textBody);
 
       // Apply bodyPr (text body properties)
       // Use layout/master bodyPr as fallback for missing attributes
@@ -1681,8 +1687,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         if (bodyPr) {
           // Text wrap: only wrap="none" should force single-line.
           // Title placeholders without explicit wrap should still be allowed to wrap.
-          const wrap = bodyPr.attr('wrap') || (fallbackBp ? fallbackBp.attr('wrap') : null);
-          if (wrap === 'none') {
+          if (textWrap === 'none') {
             textContainer.style.whiteSpace = 'nowrap';
           }
         }
@@ -1747,7 +1752,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           isSingleLineSpAutoFit &&
           !hasExplicitTextAnchor &&
           !isVerticalText &&
-          hasExplicitCenteredParagraph(node.textBody)
+          hasCenteredParagraphs
         ) {
           textContainer.style.justifyContent = 'center';
         }
@@ -1788,7 +1793,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               ...(hasSpAutoFit && !hasNormAutofit
                 ? {
                     trimOuterParagraphSpacing: true,
-                    ...(isSingleLineSpAutoFit
+                    ...(isSingleLineSpAutoFit &&
+                    !isVerticalText &&
+                    (textWrap === 'none' || hasCenteredParagraphs)
                       ? {
                           compactSingleLineSpacing: true,
                           defaultLineHeight: '1',
