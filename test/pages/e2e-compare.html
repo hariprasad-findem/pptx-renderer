@@ -320,9 +320,9 @@
         parseZip,
         buildPresentation,
         serializePresentation,
-        RECOMMENDED_ZIP_LIMITS,
       } from '../../src/index.ts';
       import { renderSlide } from '../../src/renderer/SlideRenderer.ts';
+      import { TRUSTED_TESTDATA_ZIP_LIMITS } from './zipLimits.ts';
       import { computePanelScale } from '../../src/utils/previewScale.ts';
       import {
         mergeServerMetricsIntoSlides,
@@ -901,7 +901,7 @@
         try {
           // Parse PPTX
           log('info', 'Parsing PPTX…');
-          const files = await parseZip(pptxBuffer, RECOMMENDED_ZIP_LIMITS);
+          const files = await parseZip(pptxBuffer, TRUSTED_TESTDATA_ZIP_LIMITS);
           const presentation = buildPresentation(files);
           const serialized = serializePresentation(presentation);
           log(
@@ -986,7 +986,7 @@
           const viewer = await PptxViewer.open(pptxBuffer, tempContainer, {
             fitMode: 'none',
             renderMode: 'list',
-            zipLimits: RECOMMENDED_ZIP_LIMITS,
+            zipLimits: TRUSTED_TESTDATA_ZIP_LIMITS,
             pdfjs: rendererPdfjs,
             listOptions: buildListOptions(),
           });

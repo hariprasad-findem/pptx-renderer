@@ -49,8 +49,9 @@
     <div id="slide-container"></div>
 
     <script type="module">
-      import { parseZip, buildPresentation, RECOMMENDED_ZIP_LIMITS } from '../../src/index.ts';
+      import { parseZip, buildPresentation } from '../../src/index.ts';
       import { renderSlide } from '../../src/renderer/SlideRenderer.ts';
+      import { TRUSTED_TESTDATA_ZIP_LIMITS } from './zipLimits.ts';
 
       const pdfjs = {
         moduleUrl: new URL('pdfjs-dist/build/pdf.min.mjs', import.meta.url).toString(),
@@ -120,7 +121,7 @@
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const buffer = await resp.arrayBuffer();
 
-          const files = await parseZip(buffer, RECOMMENDED_ZIP_LIMITS);
+          const files = await parseZip(buffer, TRUSTED_TESTDATA_ZIP_LIMITS);
           presentation = buildPresentation(files);
 
           slideSelect.innerHTML = '';

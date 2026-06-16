@@ -76,12 +76,8 @@
     </div>
 
     <script type="module">
-      import {
-        parseZip,
-        buildPresentation,
-        serializePresentation,
-        RECOMMENDED_ZIP_LIMITS,
-      } from '../../src/index.ts';
+      import { parseZip, buildPresentation, serializePresentation } from '../../src/index.ts';
+      import { TRUSTED_TESTDATA_ZIP_LIMITS } from './zipLimits.ts';
 
       const fileSelect = document.getElementById('file-select');
       const statusEl = document.getElementById('status');
@@ -138,7 +134,7 @@
       async function parseFile(buffer, label) {
         statusEl.textContent = 'Parsing…';
         try {
-          const files = await parseZip(buffer, RECOMMENDED_ZIP_LIMITS);
+          const files = await parseZip(buffer, TRUSTED_TESTDATA_ZIP_LIMITS);
           const presentation = buildPresentation(files);
           const result = serializePresentation(presentation);
           currentResult = result;
