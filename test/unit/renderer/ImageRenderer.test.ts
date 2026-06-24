@@ -71,6 +71,39 @@ describe('renderImage', () => {
       expect(el.style.transform).toContain('scaleX(-1)');
       expect(el.style.transform).toContain('scaleY(-1)');
     });
+
+    it('clips custom-geometry pictures without mirroring the bitmap pixels (issue #3)', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="custom clipped picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm flipH="1"><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <custGeom>
+              <avLst/><gdLst/><ahLst/><cxnLst/>
+              <rect l="l" t="t" r="r" b="b"/>
+              <pathLst>
+                <path w="1905000" h="952500">
+                  <moveTo><pt x="1905000" y="0"/></moveTo>
+                  <lnTo><pt x="0" y="0"/></lnTo>
+                  <lnTo><pt x="0" y="952500"/></lnTo>
+                  <close/>
+                </path>
+              </pathLst>
+            </custGeom>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ flipH: true, source });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.transform).not.toContain('scaleX(-1)');
+      expect(el.querySelector('svg image')).toBeTruthy();
+      expect(el.querySelector('clipPath path')?.getAttribute('d')).toContain('M');
+    });
   });
 
   describe('linked images', () => {
@@ -512,10 +545,7 @@ describe('renderImage', () => {
         createPicNode({ hlinkClick: { rId: 'rIdMissing' } }),
         missingRid,
       );
-      const unsafeEl = renderImage(
-        createPicNode({ hlinkClick: { rId: 'rIdUnsafe' } }),
-        unsafe,
-      );
+      const unsafeEl = renderImage(createPicNode({ hlinkClick: { rId: 'rIdUnsafe' } }), unsafe);
 
       noNavigationEl.click();
       missingRidEl.click();

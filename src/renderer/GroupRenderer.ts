@@ -137,16 +137,11 @@ export function renderGroup(
   wrapper.style.width = `${node.size.w}px`;
   wrapper.style.height = `${node.size.h}px`;
 
-  // Apply rotation transform
+  // Apply group rotation. Group flips are applied by remapping child geometry below so text
+  // renderers can keep readable text upright instead of mirroring the entire DOM subtree.
   const transforms: string[] = [];
   if (node.rotation !== 0) {
     transforms.push(`rotate(${node.rotation}deg)`);
-  }
-  if (node.flipH) {
-    transforms.push('scaleX(-1)');
-  }
-  if (node.flipV) {
-    transforms.push('scaleY(-1)');
   }
   if (transforms.length > 0) {
     wrapper.style.transform = transforms.join(' ');
@@ -253,6 +248,21 @@ export function renderGroup(
           };
         }
         remapShapeTextBoxBounds(childNode, scaleX, scaleY, swapsAxes);
+      }
+
+      if (node.flipH) {
+        childNode.position = {
+          ...childNode.position,
+          x: groupW - childNode.position.x - childNode.size.w,
+        };
+        childNode.flipH = !childNode.flipH;
+      }
+      if (node.flipV) {
+        childNode.position = {
+          ...childNode.position,
+          y: groupH - childNode.position.y - childNode.size.h,
+        };
+        childNode.flipV = !childNode.flipV;
       }
 
       // Overlap the 3 pie sectors at the same center so they form one circle

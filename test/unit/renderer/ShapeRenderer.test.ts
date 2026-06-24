@@ -206,11 +206,44 @@ describe('ShapeRenderer', () => {
     expect(polygon?.getAttribute('points')).toBe('0,5 10,0 10,10');
     expect(marker?.getAttribute('refX')).toBe('10');
     expect(Number.parseFloat(marker!.getAttribute('markerWidth') ?? '0')).toBeCloseTo(16, 3);
-    expect(Number.parseFloat(marker!.getAttribute('markerHeight') ?? '0')).toBeCloseTo(
-      13.333,
-      3,
-    );
-    expect(pathNumbers[1]).toBeCloseTo(16, 3);
+    expect(Number.parseFloat(marker!.getAttribute('markerHeight') ?? '0')).toBeCloseTo(13.333, 3);
+    // flipV is now applied to the connector path itself, so the same visual 16px
+    // head inset lands at height - 16 in SVG path coordinates.
+    expect(pathNumbers[1]).toBeCloseTo(35.16 - 16, 3);
+  });
+
+  it('mirrors flipped connector geometry before marker orientation is applied (issue #3)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="58" name="连接符: 肘形 57"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1">
+            <a:off x="0" y="0"/>
+            <a:ext cx="1000000" cy="200000"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 80000"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="12700">
+            <a:solidFill><a:srgbClr val="FF9900"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(numbers[0]).toBeGreaterThan(numbers[numbers.length - 2]);
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
   });
 
   it('keeps tailEnd marker visible when gradient stroke fades to transparent (xcloud-solution slide 45)', () => {
@@ -638,8 +671,7 @@ describe('ShapeRenderer', () => {
       const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
-          div.textContent?.includes('Scaled then measured') &&
-          div.style.flexDirection === 'column',
+          div.textContent?.includes('Scaled then measured') && div.style.flexDirection === 'column',
       ) as HTMLElement | undefined;
       const scaleCount = textContainer?.style.transform.match(/scale\(/g)?.length ?? 0;
 
@@ -706,8 +738,7 @@ describe('ShapeRenderer', () => {
       const el = renderShape(shapeNode, createMockRenderContext());
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
-          div.textContent?.includes('Scaled bounded text') &&
-          div.style.flexDirection === 'column',
+          div.textContent?.includes('Scaled bounded text') && div.style.flexDirection === 'column',
       ) as HTMLElement | undefined;
       const span = textContainer?.querySelector('span') as HTMLSpanElement | null;
 
@@ -1000,8 +1031,7 @@ describe('ShapeRenderer', () => {
 
     const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
     const textContainer = Array.from(el.querySelectorAll('div')).find(
-      (div) =>
-        div.textContent?.includes('quick brown fox') && div.style.flexDirection === 'column',
+      (div) => div.textContent?.includes('quick brown fox') && div.style.flexDirection === 'column',
     ) as HTMLElement | undefined;
 
     expect(textContainer).toBeDefined();
@@ -5516,7 +5546,12 @@ describe('ShapeRenderer', () => {
 
   it.each([
     ['r:embed="rIdImage"', 'local blob', /^blob:/, 'none'],
-    ['r:link="rIdAllowed"', 'allowed external URL', /^https:\/\/example.com\/image.png$/, 'xMidYMid slice'],
+    [
+      'r:link="rIdAllowed"',
+      'allowed external URL',
+      /^https:\/\/example.com\/image.png$/,
+      'xMidYMid slice',
+    ],
     ['r:embed="rIdStretchNoRect"', 'stretch without fillRect', /^blob:/, 'none'],
   ])('renders shape blipFill from %s as an SVG image', (relAttr, _label, hrefMatcher, preserve) => {
     const xml = `

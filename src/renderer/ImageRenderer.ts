@@ -19,6 +19,8 @@ import { emuToPx } from '../parser/units';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
 import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
+import { renderCustomGeometry } from '../shapes/customGeometry';
+import { getPresetShapePath } from '../shapes/presets';
 
 /**
  * Check if a file extension is an unsupported legacy format (WMF only now; EMF is handled).
@@ -35,6 +37,8 @@ function isEmfFormat(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return ext === 'emf';
 }
+
+let pictureClipPathIdCounter = 0;
 
 function resolveImageRelUrl(rel: RelEntry, ctx: RenderContext): string | undefined {
   if (isExternalTargetMode(rel.targetMode)) {
@@ -72,16 +76,17 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   wrapper.style.width = `${node.size.w}px`;
   wrapper.style.height = `${node.size.h}px`;
   wrapper.style.overflow = 'hidden';
+  const geometryClipPath = getPictureGeometryClipPath(node);
 
   // Apply transforms
   const transforms: string[] = [];
   if (node.rotation !== 0) {
     transforms.push(`rotate(${node.rotation}deg)`);
   }
-  if (node.flipH) {
+  if (node.flipH && !geometryClipPath) {
     transforms.push('scaleX(-1)');
   }
-  if (node.flipV) {
+  if (node.flipV && !geometryClipPath) {
     transforms.push('scaleY(-1)');
   }
   if (transforms.length > 0) {
@@ -221,6 +226,15 @@ function renderImageUrl(
 
   const fillRect = node.source.child('blipFill').child('stretch').child('fillRect');
   const fillRectBox = fillRect.exists() ? getFillRectBox(fillRect) : undefined;
+  const geometryClipPath = getPictureGeometryClipPath(node);
+  if (geometryClipPath) {
+    renderClippedSvgImage(node, wrapper, url, geometryClipPath, fillRectBox);
+    if (blipOpacity < 1) {
+      wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
+    }
+    return;
+  }
+
   if (fillRectBox) {
     applyImageFillRect(img, fillRectBox);
   }
@@ -309,6 +323,96 @@ function applyImageFillRect(img: HTMLImageElement, fillRect: FillRectBox): void 
   img.style.top = `${fillRect.top}%`;
   img.style.width = `${fillRect.width}%`;
   img.style.height = `${fillRect.height}%`;
+}
+
+function getPictureGeometryClipPath(node: PicNodeData): string | undefined {
+  const sourceCustomGeometry = node.source.child('spPr').child('custGeom');
+  const customGeometry =
+    node.customGeometry ?? (sourceCustomGeometry.exists() ? sourceCustomGeometry : undefined);
+  if (customGeometry?.exists()) {
+    const extNode = node.source.child('spPr').child('xfrm').child('ext');
+    const sourceExtentEmu = {
+      w: extNode.numAttr('cx') ?? 0,
+      h: extNode.numAttr('cy') ?? 0,
+    };
+    const d = renderCustomGeometry(customGeometry, node.size.w, node.size.h, sourceExtentEmu);
+    return d || undefined;
+  }
+
+  const sourcePreset = node.source.child('spPr').child('prstGeom').attr('prst');
+  const preset = node.presetGeometry ?? sourcePreset;
+  if (!preset || preset === 'rect') return undefined;
+  const d = getPresetShapePath(preset, node.size.w, node.size.h);
+  return d || undefined;
+}
+
+function getClipTransform(node: PicNodeData): string | undefined {
+  if (node.flipH && node.flipV) return `translate(${node.size.w} ${node.size.h}) scale(-1 -1)`;
+  if (node.flipH) return `translate(${node.size.w} 0) scale(-1 1)`;
+  if (node.flipV) return `translate(0 ${node.size.h}) scale(1 -1)`;
+  return undefined;
+}
+
+function renderClippedSvgImage(
+  node: PicNodeData,
+  wrapper: HTMLElement,
+  url: string,
+  clipPathD: string,
+  fillRectBox?: FillRectBox,
+): void {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${node.size.w} ${node.size.h}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.display = 'block';
+  svg.style.overflow = 'hidden';
+
+  const clipId = `picture-clip-${pictureClipPathIdCounter++}`;
+  const defs = document.createElementNS(svgNs, 'defs');
+  const clipPath = document.createElementNS(svgNs, 'clipPath');
+  clipPath.setAttribute('id', clipId);
+  clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
+  const path = document.createElementNS(svgNs, 'path');
+  path.setAttribute('d', clipPathD);
+  const clipTransform = getClipTransform(node);
+  if (clipTransform) {
+    path.setAttribute('transform', clipTransform);
+  }
+  clipPath.appendChild(path);
+  defs.appendChild(clipPath);
+  svg.appendChild(defs);
+
+  const image = document.createElementNS(svgNs, 'image');
+  image.setAttribute('href', url);
+  image.setAttribute('preserveAspectRatio', 'none');
+  image.setAttribute('clip-path', `url(#${clipId})`);
+
+  let x = ((fillRectBox?.left ?? 0) / 100) * node.size.w;
+  let y = ((fillRectBox?.top ?? 0) / 100) * node.size.h;
+  let width = ((fillRectBox?.width ?? 100) / 100) * node.size.w;
+  let height = ((fillRectBox?.height ?? 100) / 100) * node.size.h;
+
+  if (node.crop) {
+    const { top, right, bottom, left } = node.crop;
+    const visibleW = 1 - left - right;
+    const visibleH = 1 - top - bottom;
+    if (visibleW > 0.001 && visibleH > 0.001) {
+      const scaleX = 1 / visibleW;
+      const scaleY = 1 / visibleH;
+      width *= scaleX;
+      height *= scaleY;
+      x += -left * scaleX * ((fillRectBox?.width ?? 100) / 100) * node.size.w;
+      y += -top * scaleY * ((fillRectBox?.height ?? 100) / 100) * node.size.h;
+    }
+  }
+
+  image.setAttribute('x', String(x));
+  image.setAttribute('y', String(y));
+  image.setAttribute('width', String(width));
+  image.setAttribute('height', String(height));
+  wrapper.appendChild(svg);
+  svg.appendChild(image);
 }
 
 function applyPictureShapeProperties(

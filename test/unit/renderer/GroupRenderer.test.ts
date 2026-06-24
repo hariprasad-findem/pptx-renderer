@@ -9,6 +9,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { renderGroup } from '../../../src/renderer/GroupRenderer';
+import { renderShape } from '../../../src/renderer/ShapeRenderer';
 import { parseXml, SafeXmlNode } from '../../../src/parser/XmlParser';
 import { createMockRenderContext } from '../helpers/mockContext';
 import type { GroupNodeData } from '../../../src/model/nodes/GroupNode';
@@ -87,6 +88,40 @@ function makeSpXml(id = '1', name = 'Shape'): SafeXmlNode {
         <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
         <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
       </p:spPr>
+    </p:sp>
+  `);
+}
+
+function makeTextSpXml(opts: {
+  id?: string;
+  name?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text?: string;
+}): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="${opts.id ?? 'txt1'}" name="${opts.name ?? 'Text Box'}"/>
+        <p:cNvSpPr txBox="1"/>
+        <p:nvPr/>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm>
+          <a:off x="${opts.x}" y="${opts.y}"/>
+          <a:ext cx="${opts.w}" cy="${opts.h}"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        <a:noFill/>
+      </p:spPr>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:r><a:t>${opts.text ?? 'Readable text'}</a:t></a:r></a:p>
+      </p:txBody>
     </p:sp>
   `);
 }
@@ -501,7 +536,9 @@ function makeCtxWithDiagram(): RenderContext {
 describe('renderGroup — wrapper element', () => {
   it('returns an absolutely positioned div with correct position and size', () => {
     const group = makeGroup([], { x: 50, y: 30, w: 300, h: 150 });
-    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) =>
+      renderShape(childNode as any, childCtx),
+    );
 
     expect(el.tagName.toLowerCase()).toBe('div');
     expect(el.style.position).toBe('absolute');
@@ -524,25 +561,54 @@ describe('renderGroup — wrapper element', () => {
     expect(el.style.transformOrigin).toBe('center center');
   });
 
-  it('applies scaleX(-1) when flipH is true', () => {
+  it('does not mirror an empty group wrapper when flipH is true', () => {
     const group = makeGroup([], { flipH: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
-    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(el.style.transform).toBe('');
   });
 
-  it('applies scaleY(-1) when flipV is true', () => {
+  it('mirrors child geometry for flipH without flipping the group text container (issue #3)', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: '请输入标题',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(capturedChild.flipH).toBe(true);
+    expect(renderedChild.style.left).toBe('130px');
+    expect(renderedChild.textContent).toContain('请输入标题');
+  });
+
+  it('does not mirror an empty group wrapper when flipV is true', () => {
     const group = makeGroup([], { flipV: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
-    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(el.style.transform).toBe('');
   });
 
-  it('combines rotation and flip transforms', () => {
+  it('keeps rotation on the group wrapper while child remapping handles flips', () => {
     const group = makeGroup([], { rotation: 90, flipH: true, flipV: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
     const t = el.style.transform;
     expect(t).toContain('rotate(90deg)');
-    expect(t).toContain('scaleX(-1)');
-    expect(t).toContain('scaleY(-1)');
+    expect(t).not.toContain('scaleX(-1)');
+    expect(t).not.toContain('scaleY(-1)');
   });
 
   it('renders no children when children array is empty', () => {
@@ -759,14 +825,17 @@ describe('renderGroup — parseGroupChild dispatch for sp', () => {
   });
 
   it('remaps child textBoxBounds with swapped scale axes for quarter-turn children', () => {
-    const group = makeGroup([makeTxXfrmSpXml('103', 'Rotated Grouped Diagram Shape', { rot: 5400000 })], {
-      w: 200,
-      h: 100,
-      childOffsetX: 0,
-      childOffsetY: 0,
-      childExtentW: 400,
-      childExtentH: 100,
-    });
+    const group = makeGroup(
+      [makeTxXfrmSpXml('103', 'Rotated Grouped Diagram Shape', { rot: 5400000 })],
+      {
+        w: 200,
+        h: 100,
+        childOffsetX: 0,
+        childOffsetY: 0,
+        childExtentW: 400,
+        childExtentH: 100,
+      },
+    );
     const renderNode = vi.fn((node) => {
       const el = document.createElement('div');
       el.dataset.textBoxBounds = JSON.stringify(node.textBoxBounds);
@@ -966,9 +1035,14 @@ describe('renderGroup — child coordinate remapping', () => {
   it('remaps child position from child space to group space (1:1 scale)', () => {
     // childExtent == groupSize → scale factor = 1, no position shift
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 200, h: 100,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 100,
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 100,
     });
 
     let capturedNode: any;
@@ -986,9 +1060,14 @@ describe('renderGroup — child coordinate remapping', () => {
   it('scales child position by the ratio groupSize/childExtent', () => {
     // Group is 400x200 px but child space is 800x400 → scale = 0.5
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 400, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 800, childExtentH: 400,
+      x: 0,
+      y: 0,
+      w: 400,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 800,
+      childExtentH: 400,
     });
 
     let capturedNode: any;
@@ -1009,9 +1088,14 @@ describe('renderGroup — child coordinate remapping', () => {
     // Remapping: (childPos.x - chOff.x) / chExt.w * groupW
     //            = (0 - 50) / 200 * 200 = -50
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 200, h: 100,
-      childOffsetX: 50, childOffsetY: 25,
-      childExtentW: 200, childExtentH: 100,
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+      childOffsetX: 50,
+      childOffsetY: 25,
+      childExtentW: 200,
+      childExtentH: 100,
     });
 
     let capturedNode: any;
@@ -1074,7 +1158,8 @@ describe('renderGroup — child coordinate remapping', () => {
 
   it('skips coordinate remapping when childExtent is 0 in either dimension', () => {
     const group = makeGroup([makeSpXml()], {
-      childExtentW: 0, childExtentH: 0,
+      childExtentW: 0,
+      childExtentH: 0,
     });
     // When chExt is zero the remapping block is skipped — no crash expected
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
@@ -1279,12 +1364,7 @@ describe('renderGroup — group fill propagation via grpSpPr', () => {
 
 describe('renderGroup — mixed child types', () => {
   it('renders sp, cxnSp, pic, and grpSp children in the same group', () => {
-    const children = [
-      makeSpXml('1'),
-      makeCxnSpXml('2'),
-      makePicXml('3'),
-      makeNestedGrpSpXml('4'),
-    ];
+    const children = [makeSpXml('1'), makeCxnSpXml('2'), makePicXml('3'), makeNestedGrpSpXml('4')];
     const group = makeGroup(children);
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
@@ -1334,17 +1414,17 @@ describe('renderGroup — mixed child types', () => {
       return stubRenderNode(childNode, childCtx);
     });
 
-    const text = capturedNode?.children?.[0]?.child('txBody').child('p').child('r').child('t').text();
+    const text = capturedNode?.children?.[0]
+      ?.child('txBody')
+      .child('p')
+      .child('r')
+      .child('t')
+      .text();
     expect(text).toBe('Matched diagram drawing');
   });
 
   it('skips unknown children while rendering known ones in the same group', () => {
-    const children = [
-      makeUnknownTagXml(),
-      makeSpXml('10'),
-      makeUnknownTagXml(),
-      makePicXml('11'),
-    ];
+    const children = [makeUnknownTagXml(), makeSpXml('10'), makeUnknownTagXml(), makePicXml('11')];
     const group = makeGroup(children);
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
@@ -1419,9 +1499,12 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
     ];
 
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
     const renderOrder: string[] = [];
@@ -1452,9 +1535,12 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
     const firstPie = children[0].child('spPr').child('prstGeom');
     firstPie.element?.setAttribute('prst', 'pie');
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
     let capturedPie: any;
@@ -1479,9 +1565,12 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
       makeSpWithPreset('circularArrow', '3'),
     ];
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
     const renderOrder: string[] = [];

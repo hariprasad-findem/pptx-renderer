@@ -12,6 +12,7 @@ function makePicXml(
     solidFill?: boolean;
     gradFill?: boolean;
     line?: boolean;
+    customGeometry?: boolean;
     mediaNamespaced?: boolean;
   } = {},
 ) {
@@ -37,6 +38,23 @@ function makePicXml(
   const spPrLine = opts.line
     ? '<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill></ln>'
     : '';
+  const customGeometry = opts.customGeometry
+    ? `<custGeom>
+        <avLst/>
+        <gdLst/>
+        <ahLst/>
+        <cxnLst/>
+        <rect l="l" t="t" r="r" b="b"/>
+        <pathLst>
+          <path w="1828800" h="1371600">
+            <moveTo><pt x="1828800" y="0"/></moveTo>
+            <lnTo><pt x="0" y="0"/></lnTo>
+            <lnTo><pt x="0" y="1371600"/></lnTo>
+            <close/>
+          </path>
+        </pathLst>
+      </custGeom>`
+    : '';
 
   return parseXml(`
     <pic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -57,6 +75,7 @@ function makePicXml(
         ${spPrFill}
         ${spPrGradFill}
         ${spPrLine}
+        ${customGeometry}
       </spPr>
     </pic>
   `);
@@ -190,5 +209,12 @@ describe('parsePicNode', () => {
 
     expect(node.fill).toBeDefined();
     expect(node.fill!.localName).toBe('gradFill');
+  });
+
+  it('preserves custom picture geometry for clipped image rendering (issue #3)', () => {
+    const node = parsePicNode(makePicXml({ customGeometry: true }));
+
+    expect(node.customGeometry?.exists()).toBe(true);
+    expect(node.customGeometry?.localName).toBe('custGeom');
   });
 });

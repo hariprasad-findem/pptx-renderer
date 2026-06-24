@@ -135,6 +135,87 @@ function appendCssFilter(el: HTMLElement, filter: string): void {
   el.style.filter = current ? `${current} ${filter}` : filter;
 }
 
+function flipPoint(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  flipH: boolean,
+  flipV: boolean,
+): [number, number] {
+  return [flipH ? w - x : x, flipV ? h - y : y];
+}
+
+function formatPathNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+}
+
+function flipAbsolutePath(
+  pathD: string,
+  w: number,
+  h: number,
+  flipH: boolean,
+  flipV: boolean,
+): string {
+  if (!pathD || (!flipH && !flipV)) return pathD;
+
+  const tokens = pathD.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  const out: string[] = [];
+  let i = 0;
+  const read = (): number => Number(tokens[i++]);
+  const pointString = (x: number, y: number): string => {
+    const [nextX, nextY] = flipPoint(x, y, w, h, flipH, flipV);
+    return `${formatPathNumber(nextX)},${formatPathNumber(nextY)}`;
+  };
+
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+
+    switch (cmd) {
+      case 'M':
+      case 'L': {
+        out.push(`${cmd}${pointString(read(), read())}`);
+        break;
+      }
+      case 'C': {
+        out.push(
+          `C${pointString(read(), read())} ${pointString(read(), read())} ${pointString(read(), read())}`,
+        );
+        break;
+      }
+      case 'Q': {
+        out.push(`Q${pointString(read(), read())} ${pointString(read(), read())}`);
+        break;
+      }
+      case 'A': {
+        const rx = read();
+        const ry = read();
+        const axisRotation = read();
+        const largeArc = read();
+        let sweep = read();
+        const x = read();
+        const y = read();
+        if (flipH !== flipV) sweep = sweep ? 0 : 1;
+        const [nextX, nextY] = flipPoint(x, y, w, h, flipH, flipV);
+        out.push(
+          `A${formatPathNumber(rx)},${formatPathNumber(ry)} ${formatPathNumber(
+            flipH !== flipV ? -axisRotation : axisRotation,
+          )} ${largeArc},${sweep} ${formatPathNumber(nextX)},${formatPathNumber(nextY)}`,
+        );
+        break;
+      }
+      case 'Z':
+      case 'z':
+        out.push('Z');
+        break;
+      default:
+        return pathD;
+    }
+  }
+
+  return out.join(' ');
+}
+
 function resolveGlowFilter(glow: SafeXmlNode, ctx: RenderContext): string | undefined {
   const radiusPx = emuToPx(glow.numAttr('rad') ?? 0);
   if (!(radiusPx > 0)) return undefined;
@@ -1065,10 +1146,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   if (node.rotation !== 0) {
     transforms.push(`rotate(${node.rotation}deg)`);
   }
-  if (node.flipH) {
+  if (node.flipH && !isLineLike) {
     transforms.push('scaleX(-1)');
   }
-  if (node.flipV) {
+  if (node.flipV && !isLineLike) {
     transforms.push('scaleY(-1)');
   }
   if (transforms.length > 0) {
@@ -1125,6 +1206,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       pathH,
       undefined,
     );
+  }
+  if (pathD && isLineLike && (node.flipH || node.flipV)) {
+    pathD = flipAbsolutePath(pathD, pathW, pathH, node.flipH, node.flipV);
   }
 
   // ---- Resolve fill and line styles ----
