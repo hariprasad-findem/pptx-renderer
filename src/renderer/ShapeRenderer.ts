@@ -2270,14 +2270,11 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         textContainer.style.transformOrigin = 'center center';
       }
 
-      // If text was flipped, un-flip the text so it reads correctly
-      // Append to existing transforms (don't overwrite vert270 rotation)
+      // PowerPoint counters the text's horizontal axis for flipped shapes. With flipH this
+      // keeps text readable; with flipV it produces the 180-degree upside-down text Office shows.
       if (node.flipH || node.flipV) {
         const existing = textContainer.style.transform || '';
-        const flipParts: string[] = [];
-        if (node.flipH) flipParts.push('scaleX(-1)');
-        if (node.flipV) flipParts.push('scaleY(-1)');
-        textContainer.style.transform = `${existing} ${flipParts.join(' ')}`.trim();
+        textContainer.style.transform = `${existing} scaleX(-1)`.trim();
       }
 
       // Resolve fontRef color from shape style element (used by SmartArt diagram shapes

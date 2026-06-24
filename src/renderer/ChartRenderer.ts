@@ -39,6 +39,7 @@ import {
   applyDefaultTextColors,
   applyLegendGridMargins,
   applyNiceAxisRange,
+  type ChartPixelSize,
   extractChartDefaultFontSize,
   niceAxisInterval,
   niceAxisMax,
@@ -1994,6 +1995,7 @@ export function parseChartXml(
   chartXml: SafeXmlNode,
   ctx: RenderContext,
   chartPath?: string,
+  chartSize?: ChartPixelSize,
 ): ParseChartResult {
   const chartCtx = createChartRenderContext(chartXml, ctx);
   const chartPalette = buildChartPalette(chartXml, chartCtx, chartPath);
@@ -2070,7 +2072,7 @@ export function parseChartXml(
     applyLegendGridMargins(option, chart, defaultFs);
 
     // Apply PowerPoint-like nice axis range (adds headroom beyond data max)
-    applyNiceAxisRange(option);
+    applyNiceAxisRange(option, chartSize);
 
     // Apply background colors
     if (chartBg) {
@@ -2158,7 +2160,12 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   // Parse chart data and create ECharts option
   const chartTheme = ctx.presentation.chartThemes?.get(node.chartPath);
   const chartCtx = chartTheme ? { ...ctx, theme: chartTheme, colorCache: new Map() } : ctx;
-  const { option, dataTable, chartFrameStyle } = parseChartXml(chartXml, chartCtx, node.chartPath);
+  const { option, dataTable, chartFrameStyle } = parseChartXml(
+    chartXml,
+    chartCtx,
+    node.chartPath,
+    node.size,
+  );
   applyZeroCrossingAxisLabelLayout(option, node.size);
   if (chartFrameStyle) {
     wrapper.style.boxSizing = 'border-box';

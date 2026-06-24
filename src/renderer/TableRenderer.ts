@@ -428,6 +428,13 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
   }
 }
 
+function tableFlipTransform(node: TableNodeData): string {
+  const transforms: string[] = [];
+  if (node.flipH) transforms.push('scaleX(-1)');
+  if (node.flipV) transforms.push('scaleY(-1)');
+  return transforms.join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // Table Rendering
 // ---------------------------------------------------------------------------
@@ -551,6 +558,14 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
 
       // Render text inside cell
       if (cell.textBody) {
+        const textTarget = tableFlipTransform(node) ? document.createElement('div') : td;
+        const counterFlip = tableFlipTransform(node);
+        if (counterFlip && textTarget !== td) {
+          textTarget.style.width = '100%';
+          textTarget.style.height = '100%';
+          textTarget.style.transform = counterFlip;
+          textTarget.style.transformOrigin = 'center center';
+        }
         const opts = {
           defaultLineHeight: '1',
           ...(textProps
@@ -562,7 +577,10 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
               }
             : {}),
         };
-        renderTextBody(cell.textBody, undefined, ctx, td, opts);
+        renderTextBody(cell.textBody, undefined, ctx, textTarget, opts);
+        if (textTarget !== td) {
+          td.appendChild(textTarget);
+        }
       }
 
       tr.appendChild(td);

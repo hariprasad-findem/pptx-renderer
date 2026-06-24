@@ -138,6 +138,56 @@ describe('renderTable', () => {
     expect(el.style.transform).toContain('scaleY(-1)');
   });
 
+  it('counter-flips cell text when the table is flipped horizontally', () => {
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [
+          {
+            gridSpan: 1,
+            rowSpan: 1,
+            hMerge: false,
+            vMerge: false,
+            textBody: { paragraphs: [{ runs: [{ text: 'Readable' }], level: 0 }] },
+          },
+        ],
+      },
+    ];
+
+    const el = renderTable(makeTable({ columns: [400], rows, flipH: true }), makeCtx());
+    const td = el.querySelector('td')!;
+    const textHost = td.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(textHost.style.transform).toContain('scaleX(-1)');
+    expect(td.textContent).toContain('Readable');
+  });
+
+  it('counter-flips cell text when the table is flipped vertically', () => {
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [
+          {
+            gridSpan: 1,
+            rowSpan: 1,
+            hMerge: false,
+            vMerge: false,
+            textBody: { paragraphs: [{ runs: [{ text: 'Still readable' }], level: 0 }] },
+          },
+        ],
+      },
+    ];
+
+    const el = renderTable(makeTable({ columns: [400], rows, flipV: true }), makeCtx());
+    const td = el.querySelector('td')!;
+    const textHost = td.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(textHost.style.transform).toContain('scaleY(-1)');
+    expect(td.textContent).toContain('Still readable');
+  });
+
   it('skips merged cells (hMerge/vMerge)', () => {
     const rows: TableRow[] = [
       {

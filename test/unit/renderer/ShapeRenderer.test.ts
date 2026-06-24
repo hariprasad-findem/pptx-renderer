@@ -3368,6 +3368,34 @@ describe('ShapeRenderer', () => {
     expect(el.style.transform).toContain('scaleY(-1)');
   });
 
+  it('counter-flips text on the horizontal axis for both flip axes', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="580" name="Flipped text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1" flipV="1"><a:off x="0" y="0"/><a:ext cx="1000000" cy="500000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Flip text</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Flip text'),
+    ) as HTMLElement | undefined;
+
+    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
   it('renders stealth arrowhead marker', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"

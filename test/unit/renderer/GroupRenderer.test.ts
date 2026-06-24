@@ -596,6 +596,78 @@ describe('renderGroup — wrapper element', () => {
     expect(renderedChild.textContent).toContain('请输入标题');
   });
 
+  it('mirrors child geometry for flipV and lets shape text stay vertically flipped', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: 'Vertical flip text',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipV: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleY(-1)');
+    expect(capturedChild.flipV).toBe(true);
+    expect(renderedChild.style.top).toBe('50px');
+    expect(renderedChild.textContent).toContain('Vertical flip text');
+    const textContainer = Array.from(renderedChild.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Vertical flip text'),
+    ) as HTMLElement | undefined;
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
+  it('mirrors child geometry for flipH and flipV together', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: 'Double flip text',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+      flipV: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(el.style.transform).not.toContain('scaleY(-1)');
+    expect(capturedChild.flipH).toBe(true);
+    expect(capturedChild.flipV).toBe(true);
+    expect(renderedChild.style.left).toBe('130px');
+    expect(renderedChild.style.top).toBe('50px');
+    expect(renderedChild.textContent).toContain('Double flip text');
+    const textContainer = Array.from(renderedChild.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Double flip text'),
+    ) as HTMLElement | undefined;
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
   it('does not mirror an empty group wrapper when flipV is true', () => {
     const group = makeGroup([], { flipV: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
@@ -937,6 +1009,24 @@ describe('renderGroup — parseGroupChild dispatch for grpSp (nested group)', ()
     expect(innerShape.style.width).toBe('96px');
     expect(innerShape.style.height).toBe('96px');
   });
+
+  it('passes parent flipH into nested groups after mirroring their position', () => {
+    const group = makeGroup([makeNestedGrpSpXml('57')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, createMockRenderContext(), renderNode);
+
+    const nestedGroup = renderNode.mock.calls[0][0];
+    expect(nestedGroup.nodeType).toBe('group');
+    expect(nestedGroup.position.x).toBe(104);
+    expect(nestedGroup.flipH).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -959,6 +1049,24 @@ describe('renderGroup — parseGroupChild dispatch for graphicFrame (table)', ()
     const child = el.children[0] as HTMLElement;
     expect(child.getAttribute('data-node-id')).toBe('51');
   });
+
+  it('mirrors table frame position for parent flipH without flipping table content', () => {
+    const group = makeGroup([makeTableFrameXml('52')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, createMockRenderContext(), renderNode);
+
+    const tableNode = renderNode.mock.calls[0][0];
+    expect(tableNode.nodeType).toBe('table');
+    expect(tableNode.position.x).toBe(104);
+    expect(tableNode.flipH).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -976,6 +1084,26 @@ describe('renderGroup — parseGroupChild dispatch for graphicFrame (chart)', ()
     expect(el.children.length).toBe(1);
     const child = el.children[0] as HTMLElement;
     expect(child.getAttribute('data-node-type')).toBe('chart');
+  });
+
+  it('mirrors chart frame position for parent flipH without flipping chart content', () => {
+    const rId = 'rId10';
+    const ctx = makeCtxWithChart(rId);
+    const group = makeGroup([makeChartFrameXml(rId, '61')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, ctx, renderNode);
+
+    const chartNode = renderNode.mock.calls[0][0];
+    expect(chartNode.nodeType).toBe('chart');
+    expect(chartNode.position.x).toBe(104);
+    expect(chartNode.flipH).toBe(false);
   });
 
   it('silently skips chart graphicFrame when chart relationship is missing', () => {

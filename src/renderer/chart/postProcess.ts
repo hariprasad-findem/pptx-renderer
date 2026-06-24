@@ -16,6 +16,11 @@ type RadarTextContainer = {
   }[];
 };
 
+export interface ChartPixelSize {
+  w: number;
+  h: number;
+}
+
 function getRadarNameTextStyles(option: echarts.EChartsOption): Record<string, unknown>[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const opt = option as any;
@@ -215,7 +220,55 @@ export function applyLegendGridMargins(
   }
 }
 
-export function applyNiceAxisRange(option: echarts.EChartsOption): void {
+function gridEdgePx(value: unknown, fullSize: number, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.endsWith('%')) return (fullSize * parseFloat(trimmed)) / 100;
+    const parsed = parseFloat(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function gridPlotSpanPx(
+  grid: unknown,
+  chartSize: ChartPixelSize | undefined,
+  axisDimension: 'x' | 'y',
+): number | undefined {
+  if (!chartSize) return undefined;
+  const fullSize = axisDimension === 'x' ? chartSize.w : chartSize.h;
+  const gridObj = (Array.isArray(grid) ? grid[0] : grid) as Record<string, unknown> | undefined;
+  if (!gridObj) return fullSize;
+
+  const startKey = axisDimension === 'x' ? 'left' : 'top';
+  const endKey = axisDimension === 'x' ? 'right' : 'bottom';
+  const start = gridEdgePx(gridObj[startKey], fullSize, 0);
+  const end = gridEdgePx(gridObj[endKey], fullSize, 0);
+  return Math.max(0, fullSize - start - end);
+}
+
+function densityLimitedDesiredTicks(
+  axis: MutableAxisOption,
+  desiredTicks: number,
+  axisDimension: 'x' | 'y',
+  chartSize: ChartPixelSize | undefined,
+  grid: unknown,
+): number {
+  const plotSpan = gridPlotSpanPx(grid, chartSize, axisDimension);
+  if (plotSpan === undefined || plotSpan <= 0) return desiredTicks;
+
+  const axisLabel = axis.axisLabel ?? {};
+  const fontSize = typeof axisLabel.fontSize === 'number' ? axisLabel.fontSize : 12;
+  const minLabelSpacing = Math.max(28, fontSize * 2.6);
+  const maxLabels = Math.max(2, Math.floor(plotSpan / minLabelSpacing) + 1);
+  return Math.max(1, Math.min(desiredTicks, maxLabels - 1));
+}
+
+export function applyNiceAxisRange(
+  option: echarts.EChartsOption,
+  chartSize?: ChartPixelSize,
+): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const opt = option as any;
 
@@ -335,7 +388,11 @@ export function applyNiceAxisRange(option: echarts.EChartsOption): void {
     return;
   }
 
-  const processAxis = (axis: unknown, valueByIndex?: Map<number, number[]>) => {
+  const processAxis = (
+    axis: unknown,
+    axisDimension: 'x' | 'y',
+    valueByIndex?: Map<number, number[]>,
+  ) => {
     if (!axis) return;
     const axes = Array.isArray(axis) ? axis : [axis];
     axes.forEach((ax, index) => {
@@ -347,12 +404,18 @@ export function applyNiceAxisRange(option: echarts.EChartsOption): void {
       const dataMin = Math.min(...axisValues);
       const dataMax = Math.max(...axisValues);
 
-      const desiredTicks = defaultDesiredTicks;
+      const desiredTicks = densityLimitedDesiredTicks(
+        ax,
+        defaultDesiredTicks,
+        axisDimension,
+        chartSize,
+        opt.grid,
+      );
       const interval = niceAxisInterval(dataMax, dataMin, desiredTicks);
 
       if (ax.max === undefined) {
         let max = niceAxisMax(dataMax, dataMin, desiredTicks);
-        if (max > dataMax && max - dataMax < interval * 0.25) {
+        if (desiredTicks > 1 && max > dataMax && max - dataMax < interval * 0.25) {
           max += interval;
         }
         ax.max = max;
@@ -368,8 +431,8 @@ export function applyNiceAxisRange(option: echarts.EChartsOption): void {
     });
   };
 
-  processAxis(opt.xAxis);
-  processAxis(opt.yAxis, valuesByYAxis);
+  processAxis(opt.xAxis, 'x');
+  processAxis(opt.yAxis, 'y', valuesByYAxis);
 }
 
 export function niceAxisMax(dataMax: number, dataMin: number, desiredTicks = 5): number {

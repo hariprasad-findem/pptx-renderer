@@ -104,6 +104,53 @@ describe('renderImage', () => {
       expect(el.querySelector('svg image')).toBeTruthy();
       expect(el.querySelector('clipPath path')?.getAttribute('d')).toContain('M');
     });
+
+    it('combines custom-geometry clipping, srcRect crop, and flipH without bitmap mirroring', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="custom cropped picture"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <srcRect l="10000" t="20000" r="10000" b="20000"/>
+            <stretch><fillRect/></stretch>
+          </blipFill>
+          <spPr>
+            <xfrm flipH="1"><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <custGeom>
+              <avLst/><gdLst/><ahLst/><cxnLst/>
+              <rect l="l" t="t" r="r" b="b"/>
+              <pathLst>
+                <path w="1905000" h="952500">
+                  <moveTo><pt x="1905000" y="0"/></moveTo>
+                  <lnTo><pt x="0" y="0"/></lnTo>
+                  <lnTo><pt x="0" y="952500"/></lnTo>
+                  <close/>
+                </path>
+              </pathLst>
+            </custGeom>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({
+        flipH: true,
+        source,
+        size: { w: 200, h: 100 },
+        crop: { left: 0.1, right: 0.1, top: 0.2, bottom: 0.2 },
+      });
+
+      const el = renderImage(node, ctx);
+      const image = el.querySelector('svg image')!;
+      const clipPath = el.querySelector('clipPath path')!;
+
+      expect(el.style.transform).not.toContain('scaleX(-1)');
+      expect(clipPath.getAttribute('transform')).toContain('scale(-1 1)');
+      expect(Number(image.getAttribute('x'))).toBeCloseTo(-25, 1);
+      expect(Number(image.getAttribute('y'))).toBeCloseTo(-33.333, 1);
+      expect(Number(image.getAttribute('width'))).toBeCloseTo(250, 1);
+      expect(Number(image.getAttribute('height'))).toBeCloseTo(166.667, 1);
+    });
   });
 
   describe('linked images', () => {

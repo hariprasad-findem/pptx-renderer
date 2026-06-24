@@ -34,4 +34,19 @@ describe('chart option post-process helpers', () => {
     expect(option.yAxis.max).toBeGreaterThan(5);
     expect(option.yAxis.interval).toBeGreaterThan(0);
   });
+
+  it('limits default value-axis tick density for compact bar charts', () => {
+    const option = {
+      grid: { top: 40, bottom: 24 },
+      xAxis: { type: 'category' },
+      yAxis: { type: 'value', axisLabel: { fontSize: 24 } },
+      series: [{ type: 'bar', data: [2, 4, 3] }],
+    };
+
+    applyNiceAxisRange(option, { w: 278, h: 182 });
+
+    expect(option.yAxis.min).toBe(0);
+    expect(option.yAxis.max).toBe(5);
+    expect(option.yAxis.interval).toBe(5);
+  });
 });

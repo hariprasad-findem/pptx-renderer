@@ -13,6 +13,10 @@ import { SafeXmlNode } from '../parser/XmlParser';
 import { hexToRgb } from '../utils/color';
 import { resolveColor } from './StyleResolver';
 
+function shouldPropagateGroupFlip(node: BaseNodeData): boolean {
+  return node.nodeType !== 'table' && node.nodeType !== 'chart';
+}
+
 function rotationSwapsAxes(rotation: number): boolean {
   const normalized = ((rotation % 360) + 360) % 360;
   return Math.abs(normalized - 90) < 0.0001 || Math.abs(normalized - 270) < 0.0001;
@@ -255,14 +259,18 @@ export function renderGroup(
           ...childNode.position,
           x: groupW - childNode.position.x - childNode.size.w,
         };
-        childNode.flipH = !childNode.flipH;
+        if (shouldPropagateGroupFlip(childNode)) {
+          childNode.flipH = !childNode.flipH;
+        }
       }
       if (node.flipV) {
         childNode.position = {
           ...childNode.position,
           y: groupH - childNode.position.y - childNode.size.h,
         };
-        childNode.flipV = !childNode.flipV;
+        if (shouldPropagateGroupFlip(childNode)) {
+          childNode.flipV = !childNode.flipV;
+        }
       }
 
       // Overlap the 3 pie sectors at the same center so they form one circle
