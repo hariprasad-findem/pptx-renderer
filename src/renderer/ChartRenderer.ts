@@ -1105,6 +1105,7 @@ function buildRadarChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
+  chartSize?: ChartPixelSize,
 ): echarts.EChartsOption {
   const title = extractChartTitle(chartNode, seriesArr);
   const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
@@ -1178,12 +1179,17 @@ function buildRadarChartOption(
   // Read radar style to determine default marker behavior
   const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const radarHasTopLegend = legendIsAtTop(legendInfo) && !legendInfo?.overlay;
-  const radarCenter: [string, string] = radarHasTopLegend
-    ? ['50%', '66%']
-    : radarStyle === 'filled'
-      ? ['50%', '55%']
-      : ['50%', '50%'];
-  const radarRadius = radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%';
+  const manualRadarLayout = extractManualLayoutRadar(chartNode, chartSize);
+  const radarCenter: [number | string, number | string] =
+    manualRadarLayout?.center ??
+    (radarHasTopLegend
+      ? ['50%', '66%']
+      : radarStyle === 'filled'
+        ? ['50%', '55%']
+        : ['50%', '50%']);
+  const radarRadius =
+    manualRadarLayout?.radius ??
+    (radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%');
 
   const radarData = seriesArr.map((s) => {
     // Reorder values to match the reversed category order
@@ -1788,21 +1794,56 @@ function buildStockChartOption(
 /**
  * Parse plotArea/layout/manualLayout to ECharts grid override.
  */
+interface ManualLayoutBox {
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+function extractManualLayoutBox(chartNode: SafeXmlNode): ManualLayoutBox {
+  const manual = chartNode.child('plotArea').child('layout').child('manualLayout');
+  if (!manual.exists()) return {};
+  return {
+    x: manual.child('x').numAttr('val'),
+    y: manual.child('y').numAttr('val'),
+    w: manual.child('w').numAttr('val'),
+    h: manual.child('h').numAttr('val'),
+  };
+}
+
 function extractManualLayoutGrid(
   chartNode: SafeXmlNode,
 ): Partial<Record<'left' | 'top' | 'width' | 'height', string>> {
-  const manual = chartNode.child('plotArea').child('layout').child('manualLayout');
-  if (!manual.exists()) return {};
+  const box = extractManualLayoutBox(chartNode);
   const out: Partial<Record<'left' | 'top' | 'width' | 'height', string>> = {};
-  const x = manual.child('x').numAttr('val');
-  const y = manual.child('y').numAttr('val');
-  const w = manual.child('w').numAttr('val');
-  const h = manual.child('h').numAttr('val');
-  if (x !== undefined) out.left = numToPct(x);
-  if (y !== undefined) out.top = numToPct(y);
-  if (w !== undefined) out.width = numToPct(w);
-  if (h !== undefined) out.height = numToPct(h);
+  if (box.x !== undefined) out.left = numToPct(box.x);
+  if (box.y !== undefined) out.top = numToPct(box.y);
+  if (box.w !== undefined) out.width = numToPct(box.w);
+  if (box.h !== undefined) out.height = numToPct(box.h);
   return out;
+}
+
+function extractManualLayoutRadar(
+  chartNode: SafeXmlNode,
+  chartSize?: ChartPixelSize,
+): { center: [number | string, number | string]; radius: number | string } | undefined {
+  const { x, y, w, h } = extractManualLayoutBox(chartNode);
+  if (x === undefined || y === undefined || w === undefined || h === undefined) return undefined;
+
+  const centerX = x + w / 2;
+  const centerY = y + h / 2;
+  if (!chartSize) {
+    return {
+      center: [numToPct(centerX), numToPct(centerY)],
+      radius: numToPct(Math.min(w, h) / 2),
+    };
+  }
+
+  return {
+    center: [centerX * chartSize.w, centerY * chartSize.h],
+    radius: Math.min(w * chartSize.w, h * chartSize.h) / 2,
+  };
 }
 
 /** Result of parsing chart XML: option for ECharts, optional data table info. */
@@ -1818,6 +1859,7 @@ function buildOptionForChartType(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
+  chartSize?: ChartPixelSize,
 ): echarts.EChartsOption | undefined {
   switch (typeName) {
     case 'barChart':
@@ -1836,7 +1878,7 @@ function buildOptionForChartType(
     case 'doughnutChart':
       return buildPieChartOption(chartTypeNode, chartNode, seriesArr, true, ctx);
     case 'radarChart':
-      return buildRadarChartOption(chartTypeNode, chartNode, seriesArr, ctx);
+      return buildRadarChartOption(chartTypeNode, chartNode, seriesArr, ctx, chartSize);
     case 'scatterChart':
       return buildScatterChartOption(chartTypeNode, chartNode, seriesArr, ctx);
     case 'bubbleChart':
@@ -2074,6 +2116,7 @@ export function parseChartXml(
       chart,
       entry.seriesArr,
       chartCtx,
+      chartSize,
     );
     if (!option) continue;
 
@@ -2086,6 +2129,7 @@ export function parseChartXml(
           chart,
           comboEntry.seriesArr,
           chartCtx,
+          chartSize,
         );
         if (!comboOption) continue;
         option = mergeCartesianComboOptions(

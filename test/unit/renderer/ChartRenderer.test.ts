@@ -1915,6 +1915,59 @@ describe('ChartRenderer', () => {
       expect(radar.indicator[1].axisLabel).toBeUndefined();
     });
 
+    it('maps radar plotArea manualLayout to pixel center and radius (xcloud-plan radar charts)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:layout>
+                <c:manualLayout>
+                  <c:xMode val="edge"/>
+                  <c:yMode val="edge"/>
+                  <c:x val="0.25"/>
+                  <c:y val="0.25"/>
+                  <c:w val="0.5"/>
+                  <c:h val="0.5"/>
+                </c:manualLayout>
+              </c:layout>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/>
+                  <c:order val="0"/>
+                  <c:tx><c:v>Series A</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache>
+                    <c:ptCount val="4"/>
+                    <c:pt idx="0"><c:v>A</c:v></c:pt>
+                    <c:pt idx="1"><c:v>B</c:v></c:pt>
+                    <c:pt idx="2"><c:v>C</c:v></c:pt>
+                    <c:pt idx="3"><c:v>D</c:v></c:pt>
+                  </c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache>
+                    <c:ptCount val="4"/>
+                    <c:pt idx="0"><c:v>10</c:v></c:pt>
+                    <c:pt idx="1"><c:v>20</c:v></c:pt>
+                    <c:pt idx="2"><c:v>30</c:v></c:pt>
+                    <c:pt idx="3"><c:v>40</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+              </c:radarChart>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 600,
+        h: 400,
+      });
+      const radar = option.radar as any;
+
+      expect(radar.center).toEqual([300, 200]);
+      expect(radar.radius).toBe(100);
+    });
+
     it('should parse scatterChart with xVal and yVal', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
