@@ -109,6 +109,7 @@ interface MergedParagraphStyle {
   rtl?: boolean;
   marginLeft?: number;
   textIndent?: number;
+  defaultTabSize?: number;
   lineHeight?: string;
   /** True when lineHeight comes from spcPts (absolute pt value). For CJK fonts, CSS line-height
    *  with absolute values may not produce exact spacing because the font's content area can exceed
@@ -146,6 +147,9 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
 
   const indent = pPr.numAttr('indent');
   if (indent !== undefined) target.textIndent = emuToPx(indent);
+
+  const defTabSz = pPr.numAttr('defTabSz');
+  if (defTabSz !== undefined) target.defaultTabSize = emuToPx(defTabSz);
 
   // Line spacing
   // OOXML spcPct: 100000 = "single spacing" = 1.0× the font's line height.
@@ -1047,7 +1051,7 @@ export function renderTextBody(
     // overridden by the font's natural spacing).
     // Set tab-size when paragraph contains tab characters (default OOXML tab spacing = 914400 EMU = 96px)
     if (paragraph.runs.some((r) => r.text?.includes('\t'))) {
-      const defaultTabPx = 96; // 914400 EMU at 96 dpi
+      const defaultTabPx = merged.defaultTabSize ?? 96; // 914400 EMU at 96 dpi
       paraDiv.style.tabSize = `${defaultTabPx}px`;
     }
     const useLineWrappers = merged.lineHeightAbsolute && hasLineBreaks && effectiveLineHeight;

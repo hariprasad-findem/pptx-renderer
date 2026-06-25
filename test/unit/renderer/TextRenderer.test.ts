@@ -2182,6 +2182,21 @@ describe('TextRenderer — renderTextBody', () => {
       expect(paraDiv.style.tabSize).toBeTruthy();
     });
 
+    it('uses paragraph defTabSz instead of the OOXML default when rendering tabs', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: 'Before' }, { text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr defTabSz="1219200"/>'),
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      const paraDiv = container.children[0] as HTMLElement;
+      expect(paraDiv.style.tabSize).toBe('128px');
+    });
+
     it('renders tab characters between text with preserved whitespace', () => {
       const body = makeTextBody({
         paragraphs: [
