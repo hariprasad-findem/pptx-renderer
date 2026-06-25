@@ -228,7 +228,14 @@ function tryRenderSvgGradientBackground(
   ctx: RenderContext,
   container: HTMLElement,
 ): boolean {
-  const gradientFillData = resolveGradientFill(bgPr, ctx);
+  return tryRenderSvgGradientBackgroundData(resolveGradientFill(bgPr, ctx), ctx, container);
+}
+
+function tryRenderSvgGradientBackgroundData(
+  gradientFillData: GradientFillData | null,
+  ctx: RenderContext,
+  container: HTMLElement,
+): boolean {
   if (!gradientFillData?.pathType) return false;
 
   renderSvgGradientBackground(
@@ -360,7 +367,10 @@ function renderBgRef(bgRef: SafeXmlNode, ctx: RenderContext, container: HTMLElem
     (idx >= 1001 && idx - 1000 <= (ctx.theme.bgFillStyles?.length ?? 0)) ||
     (idx > 0 && idx <= (ctx.theme.fillStyles?.length ?? 0));
   if (hasThemeFill) {
-    const { fillCss } = resolveThemeBackgroundFillReference(bgRef, ctx);
+    const { fillCss, gradientFillData } = resolveThemeBackgroundFillReference(bgRef, ctx);
+    if (tryRenderSvgGradientBackgroundData(gradientFillData, ctx, container)) {
+      return;
+    }
     applyBackgroundFillCss(container, fillCss);
     return;
   }

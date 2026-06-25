@@ -589,6 +589,37 @@ describe('renderBackground', () => {
     expect(container.style.background).toContain('linear-gradient');
   });
 
+  it('renders bgRef path gradient theme fills as an SVG background layer', () => {
+    const bg = bgRefXml(1001, `<a:schemeClr val="accent1"/>`);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      theme: {
+        ...createMockRenderContext().theme,
+        bgFillStyles: [
+          parseXml(`
+            <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="phClr"/></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:path path="rect">
+                <a:fillToRect l="50000" t="50000" r="50000" b="50000"/>
+              </a:path>
+            </a:gradFill>
+          `),
+        ],
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.background).not.toContain('radial-gradient');
+    const svg = container.querySelector('svg[data-pptx-background-gradient="true"]');
+    expect(svg).toBeTruthy();
+    expect(svg?.querySelectorAll('linearGradient')).toHaveLength(2);
+    expect(svg?.querySelector('g[style*="isolation"]')).toBeTruthy();
+  });
+
   // -------------------------------------------------------------------------
   // Additional: blipFill missing from media map does not crash and sets no URL
   // -------------------------------------------------------------------------
