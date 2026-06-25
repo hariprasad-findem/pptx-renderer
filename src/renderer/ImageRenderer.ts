@@ -386,7 +386,11 @@ function renderClippedSvgImage(
   const image = document.createElementNS(svgNs, 'image');
   image.setAttribute('href', url);
   image.setAttribute('preserveAspectRatio', 'none');
-  image.setAttribute('clip-path', `url(#${clipId})`);
+  if (clipTransform) {
+    image.setAttribute('transform', clipTransform);
+  }
+  const clippedImageGroup = document.createElementNS(svgNs, 'g');
+  clippedImageGroup.setAttribute('clip-path', `url(#${clipId})`);
 
   let x = ((fillRectBox?.left ?? 0) / 100) * node.size.w;
   let y = ((fillRectBox?.top ?? 0) / 100) * node.size.h;
@@ -412,7 +416,8 @@ function renderClippedSvgImage(
   image.setAttribute('width', String(width));
   image.setAttribute('height', String(height));
   wrapper.appendChild(svg);
-  svg.appendChild(image);
+  svg.appendChild(clippedImageGroup);
+  clippedImageGroup.appendChild(image);
 }
 
 function applyPictureShapeProperties(

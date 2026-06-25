@@ -72,7 +72,7 @@ describe('renderImage', () => {
       expect(el.style.transform).toContain('scaleY(-1)');
     });
 
-    it('clips custom-geometry pictures without mirroring the bitmap pixels (issue #3)', () => {
+    it('clips custom-geometry pictures with mirrored bitmap pixels when flipH is set (issue #3)', () => {
       const ctx = createCtxWithMedia();
       const source = xmlNode(
         `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -101,11 +101,15 @@ describe('renderImage', () => {
       const el = renderImage(node, ctx);
 
       expect(el.style.transform).not.toContain('scaleX(-1)');
-      expect(el.querySelector('svg image')).toBeTruthy();
+      const image = el.querySelector('svg image');
+      expect(image).toBeTruthy();
+      expect(image?.getAttribute('clip-path')).toBeNull();
+      expect(image?.parentElement?.getAttribute('clip-path') ?? '').toContain('picture-clip-');
+      expect(image?.getAttribute('transform') ?? '').toContain('scale(-1 1)');
       expect(el.querySelector('clipPath path')?.getAttribute('d')).toContain('M');
     });
 
-    it('combines custom-geometry clipping, srcRect crop, and flipH without bitmap mirroring', () => {
+    it('combines custom-geometry clipping, srcRect crop, and flipH with bitmap mirroring', () => {
       const ctx = createCtxWithMedia();
       const source = xmlNode(
         `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -146,6 +150,9 @@ describe('renderImage', () => {
 
       expect(el.style.transform).not.toContain('scaleX(-1)');
       expect(clipPath.getAttribute('transform')).toContain('scale(-1 1)');
+      expect(image.getAttribute('clip-path')).toBeNull();
+      expect(image.parentElement?.getAttribute('clip-path') ?? '').toContain('picture-clip-');
+      expect(image.getAttribute('transform') ?? '').toContain('scale(-1 1)');
       expect(Number(image.getAttribute('x'))).toBeCloseTo(-25, 1);
       expect(Number(image.getAttribute('y'))).toBeCloseTo(-33.333, 1);
       expect(Number(image.getAttribute('width'))).toBeCloseTo(250, 1);
