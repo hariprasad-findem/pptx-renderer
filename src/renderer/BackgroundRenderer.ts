@@ -4,11 +4,19 @@
 
 import { SafeXmlNode } from '../parser/XmlParser';
 import { RenderContext } from './RenderContext';
-import { resolveColor, resolveFill, resolveThemeBackgroundFillReference } from './StyleResolver';
+import {
+  resolveColor,
+  resolveFill,
+  resolveGradientFill,
+  resolveThemeBackgroundFillReference,
+  type GradientFillData,
+} from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { isExternalTargetMode, RelEntry } from '../parser/RelParser';
 import { findMediaByTarget, findMediaByTargetAsync, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalMediaUrl } from '../utils/urlSafety';
+
+let backgroundGradientIdCounter = 0;
 
 /**
  * Composite a semi-transparent color on white so the result is always opaque.
@@ -44,6 +52,192 @@ function applyBackgroundFillCss(container: HTMLElement, fillCss: string): void {
   } else {
     container.style.backgroundColor = fillCss;
   }
+}
+
+function angleToSvgGradientCoords(angleDeg: number): {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+} {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    x1: 50 - 50 * Math.cos(rad),
+    y1: 50 - 50 * Math.sin(rad),
+    x2: 50 + 50 * Math.cos(rad),
+    y2: 50 + 50 * Math.sin(rad),
+  };
+}
+
+function appendGradientStops(gradient: SVGGradientElement, stops: GradientFillData['stops']): void {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  for (const stop of stops) {
+    const svgStop = document.createElementNS(svgNs, 'stop');
+    svgStop.setAttribute('offset', `${stop.position}%`);
+    svgStop.setAttribute('stop-color', stop.color);
+    gradient.appendChild(svgStop);
+  }
+}
+
+function renderSvgGradientBackground(
+  container: HTMLElement,
+  gradientFillData: GradientFillData,
+  width: number,
+  height: number,
+): void {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('data-pptx-background-gradient', 'true');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.position = 'absolute';
+  svg.style.left = '0';
+  svg.style.top = '0';
+  svg.style.width = '100%';
+  svg.style.height = '100%';
+  svg.style.pointerEvents = 'none';
+  svg.style.display = 'block';
+
+  const defs = document.createElementNS(svgNs, 'defs');
+  svg.appendChild(defs);
+  const gradId = `bg-grad-${++backgroundGradientIdCounter}`;
+
+  if (gradientFillData.type === 'radial' && gradientFillData.pathType === 'rect') {
+    const gcx = gradientFillData.cx ?? 0.5;
+    const gcy = gradientFillData.cy ?? 0.5;
+    const mirrorStops = (centerFrac: number) => {
+      const mirrored: Array<{ offset: number; color: string }> = [];
+      for (const stop of gradientFillData.stops) {
+        const t = stop.position / 100;
+        mirrored.push({ offset: centerFrac - t * centerFrac, color: stop.color });
+        mirrored.push({ offset: centerFrac + t * (1 - centerFrac), color: stop.color });
+      }
+      return mirrored.sort((a, b) => a.offset - b.offset);
+    };
+
+    const hGradId = `${gradId}-h`;
+    const hGrad = document.createElementNS(svgNs, 'linearGradient');
+    hGrad.setAttribute('id', hGradId);
+    hGrad.setAttribute('color-interpolation', gradientFillData.colorInterpolation ?? 'linearRGB');
+    hGrad.setAttribute('x1', '0%');
+    hGrad.setAttribute('y1', '0%');
+    hGrad.setAttribute('x2', '100%');
+    hGrad.setAttribute('y2', '0%');
+    for (const stop of mirrorStops(gcx)) {
+      const svgStop = document.createElementNS(svgNs, 'stop');
+      svgStop.setAttribute('offset', `${(stop.offset * 100).toFixed(2)}%`);
+      svgStop.setAttribute('stop-color', stop.color);
+      hGrad.appendChild(svgStop);
+    }
+    defs.appendChild(hGrad);
+
+    const vGradId = `${gradId}-v`;
+    const vGrad = document.createElementNS(svgNs, 'linearGradient');
+    vGrad.setAttribute('id', vGradId);
+    vGrad.setAttribute('color-interpolation', gradientFillData.colorInterpolation ?? 'linearRGB');
+    vGrad.setAttribute('x1', '0%');
+    vGrad.setAttribute('y1', '0%');
+    vGrad.setAttribute('x2', '0%');
+    vGrad.setAttribute('y2', '100%');
+    for (const stop of mirrorStops(gcy)) {
+      const svgStop = document.createElementNS(svgNs, 'stop');
+      svgStop.setAttribute('offset', `${(stop.offset * 100).toFixed(2)}%`);
+      svgStop.setAttribute('stop-color', stop.color);
+      vGrad.appendChild(svgStop);
+    }
+    defs.appendChild(vGrad);
+
+    const blendGroup = document.createElementNS(svgNs, 'g');
+    blendGroup.setAttribute('style', 'isolation: isolate');
+
+    const bgRect = document.createElementNS(svgNs, 'rect');
+    bgRect.setAttribute('width', String(width));
+    bgRect.setAttribute('height', String(height));
+    bgRect.setAttribute('fill', 'black');
+    blendGroup.appendChild(bgRect);
+
+    for (const id of [hGradId, vGradId]) {
+      const rect = document.createElementNS(svgNs, 'rect');
+      rect.setAttribute('width', String(width));
+      rect.setAttribute('height', String(height));
+      rect.setAttribute('fill', `url(#${id})`);
+      rect.setAttribute('style', 'mix-blend-mode: lighten');
+      blendGroup.appendChild(rect);
+    }
+    svg.appendChild(blendGroup);
+  } else if (gradientFillData.type === 'radial') {
+    const radialGrad = document.createElementNS(svgNs, 'radialGradient');
+    radialGrad.setAttribute('id', gradId);
+    radialGrad.setAttribute(
+      'color-interpolation',
+      gradientFillData.colorInterpolation ?? 'linearRGB',
+    );
+    radialGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+    const gcx = gradientFillData.cx ?? 0.5;
+    const gcy = gradientFillData.cy ?? 0.5;
+    radialGrad.setAttribute('cx', String(gcx * width));
+    radialGrad.setAttribute('cy', String(gcy * height));
+    const maxDx = Math.max(gcx, 1 - gcx);
+    const maxDy = Math.max(gcy, 1 - gcy);
+    const r = Math.sqrt(maxDx * maxDx + maxDy * maxDy);
+    radialGrad.setAttribute('r', String(r * Math.max(width, height)));
+    appendGradientStops(radialGrad, gradientFillData.stops);
+    defs.appendChild(radialGrad);
+
+    const rect = document.createElementNS(svgNs, 'rect');
+    rect.setAttribute('width', String(width));
+    rect.setAttribute('height', String(height));
+    rect.setAttribute('fill', `url(#${gradId})`);
+    svg.appendChild(rect);
+  } else {
+    const linearGrad = document.createElementNS(svgNs, 'linearGradient');
+    linearGrad.setAttribute('id', gradId);
+    linearGrad.setAttribute(
+      'color-interpolation',
+      gradientFillData.colorInterpolation ?? 'linearRGB',
+    );
+    linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+    const coords = angleToSvgGradientCoords(gradientFillData.angle);
+    linearGrad.setAttribute('x1', String((coords.x1 / 100) * width));
+    linearGrad.setAttribute('y1', String((coords.y1 / 100) * height));
+    linearGrad.setAttribute('x2', String((coords.x2 / 100) * width));
+    linearGrad.setAttribute('y2', String((coords.y2 / 100) * height));
+    appendGradientStops(linearGrad, gradientFillData.stops);
+    defs.appendChild(linearGrad);
+
+    const rect = document.createElementNS(svgNs, 'rect');
+    rect.setAttribute('width', String(width));
+    rect.setAttribute('height', String(height));
+    rect.setAttribute('fill', `url(#${gradId})`);
+    svg.appendChild(rect);
+  }
+
+  if (!container.style.position) {
+    container.style.position = 'relative';
+  }
+  container.style.background = '';
+  container.querySelectorAll('svg[data-pptx-background-gradient="true"]').forEach((el) => {
+    el.remove();
+  });
+  container.insertBefore(svg, container.firstChild);
+}
+
+function tryRenderSvgGradientBackground(
+  bgPr: SafeXmlNode,
+  ctx: RenderContext,
+  container: HTMLElement,
+): boolean {
+  const gradientFillData = resolveGradientFill(bgPr, ctx);
+  if (!gradientFillData?.pathType) return false;
+
+  renderSvgGradientBackground(
+    container,
+    gradientFillData,
+    ctx.presentation.width,
+    ctx.presentation.height,
+  );
+  return true;
 }
 
 /**
@@ -119,6 +313,9 @@ function renderBgPr(
   // gradFill
   const gradFill = bgPr.child('gradFill');
   if (gradFill.exists()) {
+    if (tryRenderSvgGradientBackground(bgPr, ctx, container)) {
+      return;
+    }
     const css = resolveFill(bgPr, ctx);
     if (css) {
       container.style.background = css;

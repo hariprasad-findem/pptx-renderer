@@ -197,6 +197,43 @@ describe('renderBackground', () => {
     expect(container.style.background).toContain('linear-gradient');
   });
 
+  it('renders path gradient backgrounds as an SVG layer instead of a CSS radial approximation', () => {
+    const bg = bgPrXml(`
+      <a:gradFill>
+        <a:gsLst>
+          <a:gs pos="0"><a:srgbClr val="831B22"/></a:gs>
+          <a:gs pos="38000"><a:srgbClr val="64131E"/></a:gs>
+          <a:gs pos="71000"><a:srgbClr val="4D144A"/></a:gs>
+          <a:gs pos="100000"><a:srgbClr val="391262"/></a:gs>
+        </a:gsLst>
+        <a:path path="circle">
+          <a:fillToRect l="100000" t="100000"/>
+        </a:path>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      presentation: {
+        ...createMockRenderContext().presentation,
+        width: 1280,
+        height: 720,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.background).not.toContain('radial-gradient');
+    const svg = container.querySelector('svg[data-pptx-background-gradient="true"]');
+    expect(svg).toBeTruthy();
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 1280 720');
+    const radial = svg?.querySelector('radialGradient');
+    expect(radial).toBeTruthy();
+    expect(radial?.getAttribute('color-interpolation')).toBe('linearRGB');
+    expect(radial?.getAttribute('cx')).toBe('1280');
+    expect(radial?.getAttribute('cy')).toBe('720');
+    expect(svg?.querySelectorAll('stop')).toHaveLength(4);
+  });
+
   it('renders pattern fill backgrounds through the shared fill resolver', () => {
     const bg = bgPrXml(`
       <a:pattFill prst="pct20">
