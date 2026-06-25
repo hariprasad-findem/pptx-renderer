@@ -1538,6 +1538,10 @@ function buildBubbleChartOption(
 // Stock Chart (Candlestick)
 // ---------------------------------------------------------------------------
 
+function looksLikeDateCategory(label: string): boolean {
+  return /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(label.trim());
+}
+
 function buildStockChartOption(
   chartTypeNode: SafeXmlNode,
   chartNode: SafeXmlNode,
@@ -1601,6 +1605,19 @@ function buildStockChartOption(
     splitLine: { show: false },
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
+  const autoRotateDateLabels =
+    categories.length >= 3 &&
+    categories.every((category) => looksLikeDateCategory(category)) &&
+    !categoryAxis.deleted &&
+    categoryAxis.tickLblPos !== 'none';
+  if (autoRotateDateLabels) {
+    const axisLabel = (xAxisDef.axisLabel as Record<string, unknown>) || {};
+    xAxisDef.axisLabel = {
+      ...axisLabel,
+      rotate: 45,
+      margin: Math.max(Number(axisLabel.margin) || 0, 10),
+    };
+  }
 
   const yAxisDef: Record<string, unknown> = { type: 'value' };
   applyAxisInfo(yAxisDef, valueAxis, 'value');
@@ -1624,6 +1641,7 @@ function buildStockChartOption(
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const gridBottom = Math.max(getGridBottomPx(legendInfo), autoRotateDateLabels ? 56 : 0);
   const isHlc = seriesArr.length >= 3 && seriesArr.length < 4;
 
   const legendData = isHlc
@@ -1732,7 +1750,7 @@ function buildStockChartOption(
       left: 24,
       right: 10,
       top: gridTop,
-      bottom: getGridBottomPx(legendInfo),
+      bottom: gridBottom,
       ...manualGrid,
     },
     xAxis: xAxisDef,
