@@ -1846,6 +1846,44 @@ function extractManualLayoutRadar(
   };
 }
 
+function buildPlotAreaBackgroundGraphic(
+  chartNode: SafeXmlNode,
+  fill: string,
+  chartSize?: ChartPixelSize,
+): Record<string, unknown> | undefined {
+  if (!chartSize) return undefined;
+
+  const { x = 0, y = 0, w = 1, h = 1 } = extractManualLayoutBox(chartNode);
+  return {
+    type: 'rect',
+    silent: true,
+    z: -10,
+    left: x * chartSize.w,
+    top: y * chartSize.h,
+    shape: {
+      width: w * chartSize.w,
+      height: h * chartSize.h,
+    },
+    style: {
+      fill,
+      stroke: 'none',
+    },
+  };
+}
+
+function prependGraphicOption(
+  option: echarts.EChartsOption,
+  graphic: Record<string, unknown>,
+): void {
+  const current = option.graphic;
+  if (!current) {
+    option.graphic = graphic;
+    return;
+  }
+
+  option.graphic = Array.isArray(current) ? [graphic, ...current] : [graphic, current];
+}
+
 /** Result of parsing chart XML: option for ECharts, optional data table info. */
 export interface ParseChartResult {
   option: echarts.EChartsOption;
@@ -2165,12 +2203,17 @@ export function parseChartXml(
     if (chartPalette && chartPalette.length > 0) {
       option.color = chartPalette;
     }
-    if (plotAreaBg && option.grid) {
-      // Apply plot area background via grid (for cartesian charts)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (option.grid as any).backgroundColor = plotAreaBg;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (option.grid as any).show = true;
+    if (plotAreaBg) {
+      if (option.grid) {
+        // Apply plot area background via grid (for cartesian charts)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (option.grid as any).backgroundColor = plotAreaBg;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (option.grid as any).show = true;
+      } else {
+        const graphic = buildPlotAreaBackgroundGraphic(chart, plotAreaBg, chartSize);
+        if (graphic) prependGraphicOption(option, graphic);
+      }
     }
 
     const dataTableSeries =
