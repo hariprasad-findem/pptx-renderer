@@ -4816,6 +4816,44 @@ describe('ChartRenderer', () => {
       // Array value: should use first element
       expect(tooltip.valueFormatter([0.25])).toBe('25%');
     });
+
+    it('does not apply the first series format as a global tooltip formatter for mixed formats', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/><c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:v>Percent</c:v></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>0.25</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:ser>
+                <c:idx val="1"/><c:order val="1"/>
+                <c:tx><c:v>Count</c:v></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>#,##0</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>1234</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const tooltip = option.tooltip as any;
+      const series = option.series as any[];
+
+      expect(tooltip.valueFormatter).toBeUndefined();
+      expect(series[0].tooltip.valueFormatter(0.25)).toBe('25%');
+      expect(series[1].tooltip.valueFormatter(1234)).toBe('1,234');
+    });
   });
 
   // ==========================================================================

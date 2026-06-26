@@ -451,6 +451,12 @@ function resolveBlankDisplayValue(
   return dispBlanksAs === 'zero' ? 0 : null;
 }
 
+function getSharedSeriesFormatCode(seriesArr: SeriesData[]): string | undefined {
+  const first = seriesArr[0]?.formatCode;
+  if (!first) return undefined;
+  return seriesArr.every((series) => series.formatCode === first) ? first : undefined;
+}
+
 function buildPieLabelOption(
   cfg: DataLabelConfig | undefined,
   formatCode: string | undefined,
@@ -711,11 +717,12 @@ function buildBarChartOption(
   };
   applyAxisInfo(categoryAxisDef, categoryAxis, 'category');
 
-  // Check if any series uses percentage format; axis numFmt takes priority
+  // Use a series-derived axis/tooltip format only when all series share it.
+  const sharedSeriesFormat = getSharedSeriesFormatCode(seriesArr);
   const pctFormat =
     (isPercentStacked ? '0%' : undefined) ||
     valueAxis.numFmt ||
-    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (sharedSeriesFormat?.includes('%') ? sharedSeriesFormat : undefined);
   const valueAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -734,8 +741,7 @@ function buildBarChartOption(
   // When value axis is hidden, reduce left/right padding so bars use full width
   const gridLeft = isHorizontal ? 10 : valueAxis.deleted ? 4 : 24;
   const gridRight = isHorizontal ? 28 : 10;
-  // Determine a shared format code for tooltips: prefer axis numFmt, then first series formatCode
-  const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
+  const tooltipFmt = pctFormat || sharedSeriesFormat;
   const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
@@ -936,10 +942,11 @@ function buildLineChartOption(
   const plotArea = chartNode.child('plotArea');
   const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
+  const sharedSeriesFormat = getSharedSeriesFormatCode(seriesArr);
   const pctFormat =
     (isPercentStacked ? '0%' : undefined) ||
     valueAxis.numFmt ||
-    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (sharedSeriesFormat?.includes('%') ? sharedSeriesFormat : undefined);
   const yAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -967,7 +974,7 @@ function buildLineChartOption(
   const gridTop = getGridTopPx(!!title, legendInfo);
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
   const gridLeft = valueAxis.deleted ? 4 : 24;
-  const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
+  const tooltipFmt = pctFormat || sharedSeriesFormat;
   const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
@@ -1149,7 +1156,7 @@ function buildPieChartOption(
   });
 
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  const tooltipFmt = renderSeriesArr.find((s) => s.formatCode)?.formatCode;
+  const tooltipFmt = getSharedSeriesFormatCode(renderSeriesArr);
   const legendData = isDoughnut
     ? uniquePieLegendCategories(renderSeriesArr)
     : renderSeriesArr[0].categories;
