@@ -2737,7 +2737,6 @@ describe('ChartRenderer', () => {
       const series = option.series as any[];
       expect(series.length).toBeGreaterThan(0);
     });
-
   });
 
   // ==========================================================================
@@ -5778,6 +5777,51 @@ describe('ChartRenderer', () => {
       });
     });
 
+    it('uses legacy Office black axis and gridline defaults for old theme charts (oracle-pypptx-chart-0005)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="bar"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Headcount</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>Engineering</c:v></c:pt><c:pt idx="1"><c:v>Sales</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>45</c:v></c:pt><c:pt idx="1"><c:v>32</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="l"/><c:majorTickMark val="out"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+      const ctx = createMockRenderContext();
+      ctx.theme = {
+        ...ctx.theme,
+        colorScheme: new Map([
+          ...ctx.theme.colorScheme,
+          ['accent1', '4F81BD'],
+          ['accent2', 'C0504D'],
+          ['accent3', '9BBB59'],
+        ]),
+      };
+
+      const { option } = parseChartOption(xml, ctx);
+      const xAxis = option.xAxis as any;
+
+      expect(xAxis.splitLine).toMatchObject({
+        show: true,
+        lineStyle: { color: '#000000', width: 1, type: 'solid' },
+      });
+      expect(xAxis.axisLine.lineStyle.color).toBe('#000000');
+      expect(xAxis.axisTick.lineStyle.color).toBe('#000000');
+    });
+
     it('uses Office-style default axis text and lines when axis styling is omitted', () => {
       const xml = `<c:chartSpace
         xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -7634,13 +7678,14 @@ describe('ChartRenderer', () => {
         width: '30%',
         height: '40%',
       });
-      expect(series.labelLayout({ dataIndex: 0, rect: { x: 10, y: 20, width: 200, height: 100 } }))
-        .toEqual({
-          x: 30,
-          y: 40,
-          width: 60,
-          height: 40,
-        });
+      expect(
+        series.labelLayout({ dataIndex: 0, rect: { x: 10, y: 20, width: 200, height: 100 } }),
+      ).toEqual({
+        x: 30,
+        y: 40,
+        width: 60,
+        height: 40,
+      });
     });
 
     it('suppresses point-level deleted pie labels over shared labels', () => {
@@ -7680,9 +7725,7 @@ describe('ChartRenderer', () => {
       ['[Red]weird', 1.234, '1.23'],
       ['0.0%', 0.125, '12.5%'],
     ])('formats value-axis labels with numFmt=%s', (formatCode, input, expected) => {
-      const numFmtXml = formatCode
-        ? `<c:numFmt formatCode="${formatCode}" sourceLinked="0"/>`
-        : '';
+      const numFmtXml = formatCode ? `<c:numFmt formatCode="${formatCode}" sourceLinked="0"/>` : '';
       const xml = buildChartSpaceXml({ valAxDeleted: false }).replace(
         '<c:axId val="2"/>\n          <c:scaling><c:orientation val="minMax"/></c:scaling>',
         `<c:axId val="2"/>

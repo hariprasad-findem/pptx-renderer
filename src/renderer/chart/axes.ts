@@ -19,6 +19,20 @@ const DEFAULT_AXIS_INFO: AxisInfo = {
   orientation: 'minMax',
 };
 
+function themeHex(ctx: RenderContext, key: string): string | undefined {
+  const value = ctx.theme.colorScheme.get(key);
+  return value?.replace('#', '').toUpperCase();
+}
+
+function legacyOfficeImplicitAxisColor(ctx: RenderContext): string | undefined {
+  // Office 2007/2010 default chart themes use black implicit axis/grid lines,
+  // while newer Office themes use the lighter gray default.
+  if (themeHex(ctx, 'accent1') === '4F81BD' && themeHex(ctx, 'accent2') === 'C0504D') {
+    return '#000000';
+  }
+  return undefined;
+}
+
 function extractAxisLabelColor(ax: SafeXmlNode, ctx: RenderContext): string | undefined {
   const txPr = ax.child('txPr');
   if (!txPr.exists()) return undefined;
@@ -97,8 +111,14 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   const txStyle = extractTxPrStyle(ax, ctx);
   const labelColor = txStyle?.color ?? extractAxisLabelColor(ax, ctx);
   const labelFontSize = txStyle?.fontSize;
-  const lineColor = extractAxisLineColor(ax, ctx);
-  const majorGridlineStyle = hasMajorGridlines ? extractMajorGridlineStyle(ax, ctx) : undefined;
+  const implicitAxisColor = legacyOfficeImplicitAxisColor(ctx);
+  const lineColor = extractAxisLineColor(ax, ctx) ?? implicitAxisColor;
+  const majorGridlineStyle = hasMajorGridlines
+    ? (extractMajorGridlineStyle(ax, ctx) ??
+      (implicitAxisColor
+        ? { ...DEFAULT_MAJOR_GRIDLINE_STYLE, color: implicitAxisColor }
+        : undefined))
+    : undefined;
   const axisTitle = extractAxisTitle(ax, ctx);
   return {
     deleted,
@@ -240,7 +260,7 @@ export function applyAxisInfo(
     if (existingLineStyle.color === undefined) {
       axisDef.axisTick = {
         ...existingTick,
-        lineStyle: { ...existingLineStyle, color: DEFAULT_CHART_AXIS_LINE_COLOR },
+        lineStyle: { ...existingLineStyle, color: info.lineColor ?? DEFAULT_CHART_AXIS_LINE_COLOR },
       };
     }
   }
