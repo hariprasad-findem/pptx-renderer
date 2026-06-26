@@ -7,6 +7,15 @@ import { resolveColor } from '../StyleResolver';
 import { resolveColorToHex } from './style';
 import { EXPLICIT_FONT_SIZE, type ChartTextStyle } from './types';
 
+export type EChartsTextStyle = ChartTextStyle & {
+  fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number;
+};
+
+export interface ChartRichText {
+  text: string;
+  rich: Record<string, EChartsTextStyle>;
+}
+
 export function extractTitleText(title: SafeXmlNode): string | undefined {
   const tx = title.child('tx');
   if (!tx.exists()) return undefined;
@@ -41,6 +50,37 @@ export function extractTitleText(title: SafeXmlNode): string | undefined {
   }
 
   return undefined;
+}
+
+function escapeRichTextContent(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\|/g, '\\|');
+}
+
+export function chartTextStyleToEChartsTextStyle(
+  style: ChartTextStyle | undefined,
+): EChartsTextStyle | undefined {
+  if (!style) return undefined;
+  const out: EChartsTextStyle = {
+    ...(style.color ? { color: style.color } : {}),
+    ...(style.fontSize !== undefined ? { fontSize: style.fontSize } : {}),
+    ...(style.fontFamily ? { fontFamily: style.fontFamily } : {}),
+    ...(style.textShadowColor ? { textShadowColor: style.textShadowColor } : {}),
+    ...(style.textShadowBlur !== undefined ? { textShadowBlur: style.textShadowBlur } : {}),
+    ...(style.textShadowOffsetX !== undefined
+      ? { textShadowOffsetX: style.textShadowOffsetX }
+      : {}),
+    ...(style.textShadowOffsetY !== undefined
+      ? { textShadowOffsetY: style.textShadowOffsetY }
+      : {}),
+  };
+  if (style.bold !== undefined) {
+    out.fontWeight = style.bold ? 'bold' : 'normal';
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function extractTxPrColor(parentNode: SafeXmlNode, ctx: RenderContext): string | undefined {
@@ -172,6 +212,50 @@ export function extractTitleTextStyle(
   return (
     extractTxPrStyle(title, ctx) ?? extractParagraphTextStyle(title.child('tx').child('rich'), ctx)
   );
+}
+
+export function extractTitleRichText(
+  title: SafeXmlNode,
+  ctx: RenderContext,
+): ChartRichText | undefined {
+  const richNode = title.child('tx').child('rich');
+  if (!richNode.exists()) return undefined;
+
+  const paragraphs: string[] = [];
+  const rich: Record<string, EChartsTextStyle> = {};
+  let runIndex = 0;
+
+  for (const p of richNode.children('p')) {
+    const parts: string[] = [];
+    for (const child of p.allChildren()) {
+      if (child.localName === 'br') {
+        parts.push('\n');
+        continue;
+      }
+      if (child.localName !== 'r' && child.localName !== 'fld') {
+        continue;
+      }
+
+      const text = child.child('t').text();
+      if (!text) continue;
+      const runStyle = chartTextStyleToEChartsTextStyle(
+        extractDefRPrStyle(child.child('rPr'), ctx),
+      );
+      if (!runStyle) {
+        parts.push(escapeRichTextContent(text));
+        continue;
+      }
+
+      const styleName = `r${runIndex++}`;
+      rich[styleName] = runStyle;
+      parts.push(`{${styleName}|${escapeRichTextContent(text)}}`);
+    }
+    const paragraph = parts.join('');
+    if (paragraph) paragraphs.push(paragraph);
+  }
+
+  if (Object.keys(rich).length === 0) return undefined;
+  return { text: paragraphs.join('\n'), rich };
 }
 
 export function getChartThemeFontFamily(ctx: RenderContext): string | undefined {

@@ -9,7 +9,13 @@ import { SafeXmlNode } from '../parser/XmlParser';
 import { applyAxisInfo, getChartAxisIds, parseAxes, parseScatterAxes } from './chart/axes';
 import { formatValue } from './chart/format';
 import { markerSizeToPx } from './chart/style';
-import { extractTitleText, extractTitleTextStyle, getChartThemeFontFamily } from './chart/text';
+import {
+  chartTextStyleToEChartsTextStyle,
+  extractTitleRichText,
+  extractTitleText,
+  extractTitleTextStyle,
+  getChartThemeFontFamily,
+} from './chart/text';
 import { parseOoxmlBoolElement } from './chart/ooxml';
 import { parseDataLabels, parsePointDataLabelOverrides } from './chart/dataLabels';
 import { parseExplosion, parseSeries } from './chart/series';
@@ -95,6 +101,33 @@ function extractChartTitle(chartNode: SafeXmlNode, seriesArr?: SeriesData[]): st
   }
 
   return extractTitleText(title);
+}
+
+function buildChartTitleOption(
+  chartNode: SafeXmlNode,
+  seriesArr: SeriesData[],
+  ctx: RenderContext,
+  fontSize: number,
+): echarts.EChartsOption['title'] | undefined {
+  const title = extractChartTitle(chartNode, seriesArr);
+  if (!title) return undefined;
+
+  const titleNode = chartNode.child('title');
+  const richTitle = extractTitleRichText(titleNode, ctx);
+  const titleStyle = extractTitleTextStyle(titleNode, ctx);
+  const echartsTitleStyle = chartTextStyleToEChartsTextStyle(titleStyle);
+  const titleLayout = extractTitleManualLayout(chartNode);
+
+  return {
+    text: richTitle?.text ?? title,
+    left: 'center',
+    ...titleLayout,
+    textStyle: {
+      fontSize,
+      ...(echartsTitleStyle ?? {}),
+      ...(richTitle ? { rich: richTitle.rich } : {}),
+    },
+  };
 }
 
 /**
@@ -556,9 +589,7 @@ function buildBarChartOption(
   // Use categories from the first series that has them
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
 
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -736,8 +767,8 @@ function buildBarChartOption(
   if (isPercentStacked) forcePercentAxis(valueAxisDef);
   applyAxisInfo(valueAxisDef, valueAxis, 'value');
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   // When value axis is hidden, reduce left/right padding so bars use full width
   const gridLeft = isHorizontal ? 10 : valueAxis.deleted ? 4 : 24;
   const gridRight = isHorizontal ? 28 : 10;
@@ -747,14 +778,7 @@ function buildBarChartOption(
   const containLabel = !hasManualGrid(manualGrid);
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'axis' as const,
       textStyle: legendTextStyle,
@@ -798,9 +822,7 @@ function buildLineChartOption(
   isArea: boolean,
 ): echarts.EChartsOption {
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -971,22 +993,15 @@ function buildLineChartOption(
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const gridLeft = valueAxis.deleted ? 4 : 24;
   const tooltipFmt = pctFormat || sharedSeriesFormat;
   const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'axis' as const,
       textStyle: legendTextStyle,
@@ -1043,16 +1058,14 @@ function buildPieChartOption(
   isDoughnut: boolean,
   ctx: RenderContext,
 ): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
 
   const renderSeriesArr = isDoughnut ? seriesArr : seriesArr.slice(0, 1);
   if (renderSeriesArr.length === 0) {
-    return { title: title ? { text: title } : undefined };
+    return { title: titleOption };
   }
 
   const serNodesByOrder = chartTypeNode
@@ -1155,20 +1168,13 @@ function buildPieChartOption(
     };
   });
 
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const tooltipFmt = getSharedSeriesFormatCode(renderSeriesArr);
   const legendData = isDoughnut
     ? uniquePieLegendCategories(renderSeriesArr)
     : renderSeriesArr[0].categories;
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'item' as const,
       ...(tooltipFmt
@@ -1193,9 +1199,7 @@ function buildRadarChartOption(
   ctx: RenderContext,
   chartSize?: ChartPixelSize,
 ): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -1319,16 +1323,9 @@ function buildRadarChartOption(
     };
   });
 
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {},
     legend: buildLegendOption(
       legendOpt,
@@ -1371,9 +1368,7 @@ function buildScatterChartOption(
   seriesArr: SeriesData[],
   ctx: RenderContext,
 ): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -1449,8 +1444,8 @@ function buildScatterChartOption(
   const plotArea = chartNode.child('plotArea');
   const { xAxis: xAxisInfo, yAxis: yAxisInfo } = parseScatterAxes(plotArea, ctx);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
   const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
@@ -1463,14 +1458,7 @@ function buildScatterChartOption(
   applyAxisInfo(yAxisDef, yAxisInfo, 'value');
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: { trigger: 'item' },
     legend: buildLegendOption(legendOpt, legendInfo, legendTopPx, legendData, legendTextStyle),
     grid: {
@@ -1539,9 +1527,7 @@ function buildBubbleChartOption(
   seriesArr: SeriesData[],
   ctx: RenderContext,
 ): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -1581,8 +1567,8 @@ function buildBubbleChartOption(
   const plotArea = chartNode.child('plotArea');
   const { xAxis: xAxisInfo, yAxis: yAxisInfo } = parseScatterAxes(plotArea, ctx);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
   const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
@@ -1612,14 +1598,7 @@ function buildBubbleChartOption(
   );
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'item',
       formatter: (params: unknown) => {
@@ -1662,9 +1641,7 @@ function buildStockChartOption(
   seriesArr: SeriesData[],
   ctx: RenderContext,
 ): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
 
   // Stock charts have 3 (HLC) or 4 (OHLC) series:
@@ -1708,7 +1685,7 @@ function buildStockChartOption(
   const plotArea = chartNode.child('plotArea');
   const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
 
@@ -1754,7 +1731,7 @@ function buildStockChartOption(
 
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const gridBottom = Math.max(getGridBottomPx(legendInfo), autoRotateDateLabels ? 56 : 0);
   const isHlc = seriesArr.length >= 3 && seriesArr.length < 4;
 
@@ -1847,14 +1824,7 @@ function buildStockChartOption(
       ];
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
     legend: buildLegendOption(legendOpt, legendInfo, legendTopPx, legendData, legendTextStyle),
     grid: {

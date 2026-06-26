@@ -1168,6 +1168,37 @@ describe('ChartRenderer', () => {
       expect(title.textStyle.textShadowOffsetY).toBeCloseTo(2.8, 1);
     });
 
+    it('should preserve chart title rich run styles (model-platform chart titles)', () => {
+      const titleRichPPr = `
+        <a:defRPr sz="1800" b="1">
+          <a:solidFill><a:schemeClr val="dk1"/></a:solidFill>
+        </a:defRPr>`;
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        titleText: '1.2X 模型微调速度提升',
+        titleRichPPr,
+      }).replace(
+        '<a:r><a:t>1.2X 模型微调速度提升</a:t></a:r>',
+        `<a:r>
+          <a:rPr b="1">
+            <a:solidFill><a:srgbClr val="4D62D7"/></a:solidFill>
+          </a:rPr>
+          <a:t>1.2X </a:t>
+        </a:r>
+        <a:r>
+          <a:rPr sz="1600" b="0"/>
+          <a:t>模型微调速度提升</a:t>
+        </a:r>`,
+      );
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+
+      expect(title?.text).toBe('{r0|1.2X }{r1|模型微调速度提升}');
+      expect(title.textStyle.rich.r0).toMatchObject({ color: '#4D62D7', fontWeight: 'bold' });
+      expect(title.textStyle.rich.r1).toMatchObject({ fontSize: 16, fontWeight: 'normal' });
+    });
+
     it('should apply title rich text style when title txPr is omitted', () => {
       const xml = buildChartSpaceXml({
         hasLegend: false,
