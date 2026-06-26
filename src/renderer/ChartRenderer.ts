@@ -208,6 +208,7 @@ const DEFAULT_LINE_MARKER_SCATTER_SYMBOLS = ['diamond', 'rect', 'triangle', 'cir
 const DEFAULT_SCATTER_MARKER_SIZE = 14;
 const DEFAULT_LINE_MARKER_SYMBOLS = ['diamond', 'square', 'triangle', 'circle'];
 const DEFAULT_LINE_MARKER_SIZE = markerSizeToPx(9);
+const DEFAULT_BUBBLE_MAX_DIAMETER = 120;
 
 function defaultScatterSymbol(scatterStyle: string, seriesIndex: number): string {
   if (scatterStyle === 'lineMarker' || scatterStyle === 'smoothMarker') {
@@ -1532,7 +1533,7 @@ function buildBubbleChartOption(
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
   const bubbleScale = Math.max(chartTypeNode.child('bubbleScale').numAttr('val') ?? 100, 0);
-  const maxBubbleDiameter = 100 * (bubbleScale / 100);
+  const maxBubbleDiameter = DEFAULT_BUBBLE_MAX_DIAMETER * (bubbleScale / 100);
 
   // Bubble charts scale bubble area by value. In screen space that means diameter
   // should follow sqrt(value / maxValue), not a linear min-max interpolation.

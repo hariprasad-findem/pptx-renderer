@@ -5208,9 +5208,9 @@ describe('ChartRenderer', () => {
       // symbolSize should be a function
       expect(typeof series[0].symbolSize).toBe('function');
       // Bubble diameter should follow sqrt(value / maxValue), not linear normalization.
-      expect(series[0].symbolSize([0, 0, 5])).toBeCloseTo(44.7214, 3);
-      expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(77.4597, 3);
-      expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(100, 3);
+      expect(series[0].symbolSize([0, 0, 5])).toBeCloseTo(53.6656, 3);
+      expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(92.9516, 3);
+      expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(120, 3);
     });
 
     it('honors explicit bubbleScale=0 instead of falling back to default scale', () => {
