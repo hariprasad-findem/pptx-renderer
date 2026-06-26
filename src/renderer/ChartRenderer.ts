@@ -6,6 +6,7 @@ import * as echarts from 'echarts';
 import { ChartNodeData } from '../model/nodes/ChartNode';
 import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
+import { hexToRgb, rgbToHex } from '../utils/color';
 import { applyAxisInfo, getChartAxisIds, parseAxes, parseScatterAxes } from './chart/axes';
 import { formatValue } from './chart/format';
 import { markerSizeToPx } from './chart/style';
@@ -369,6 +370,24 @@ function forcePercentAxis(axisDef: Record<string, unknown>): void {
     ...((axisDef.axisLabel as object) || {}),
     formatter: (val: number) => formatValue(val, '0%'),
   };
+}
+
+function mixHexColor(hex: string, targetHex: string, sourceWeight: number): string {
+  const source = hexToRgb(hex);
+  const target = hexToRgb(targetHex);
+  const targetWeight = 1 - sourceWeight;
+  return rgbToHex(
+    source.r * sourceWeight + target.r * targetWeight,
+    source.g * sourceWeight + target.g * targetWeight,
+    source.b * sourceWeight + target.b * targetWeight,
+  );
+}
+
+function buildFilledRadarAreaColor(hex: string): echarts.graphic.LinearGradient {
+  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: mixHexColor(hex, '#FFFFFF', 0.55) },
+    { offset: 1, color: mixHexColor(hex, '#000000', 0.92) },
+  ]);
 }
 
 function collectSeriesValues(seriesArr: SeriesData[], stacked: boolean): number[] {
@@ -1213,6 +1232,7 @@ function buildRadarChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
+  chartPalette?: string[],
   chartSize?: ChartPixelSize,
 ): echarts.EChartsOption {
   const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
@@ -1253,7 +1273,16 @@ function buildRadarChartOption(
         ...(valueAxis.labelFontSize !== undefined ? { fontSize: valueAxis.labelFontSize } : {}),
       }
     : undefined;
-  const radarSplitLine = valueAxis.hasMajorGridlines
+  // Read radar style to determine default marker/grid behavior
+  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
+  const hasExplicitRadarSplitLineStyle = plotArea
+    .child('valAx')
+    .child('majorGridlines')
+    .child('spPr')
+    .exists();
+  const showRadarSplitLine =
+    valueAxis.hasMajorGridlines && (radarStyle !== 'filled' || hasExplicitRadarSplitLineStyle);
+  const radarSplitLine = showRadarSplitLine
     ? {
         show: true,
         lineStyle: {
@@ -1282,8 +1311,6 @@ function buildRadarChartOption(
     ...(index === 0 && valueAxisLabel ? { axisLabel: valueAxisLabel } : {}),
   }));
 
-  // Read radar style to determine default marker behavior
-  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const radarHasTopLegend = legendIsAtTop(legendInfo) && !legendInfo?.overlay;
   const manualRadarLayout = extractManualLayoutRadar(chartNode, chartSize);
   const radarCenter: [number | string, number | string] =
@@ -1297,7 +1324,7 @@ function buildRadarChartOption(
     manualRadarLayout?.radius ??
     (radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%');
 
-  const radarData = seriesArr.map((s) => {
+  const radarData = seriesArr.map((s, idx) => {
     // Reorder values to match the reversed category order
     const cwValues = s.values.length > 1 ? [s.values[0], ...s.values.slice(1).reverse()] : s.values;
     const echartsSymbol = mapOoxmlSymbol(s.markerSymbol);
@@ -1306,22 +1333,24 @@ function buildRadarChartOption(
       radarStyle === 'marker' || (echartsSymbol !== undefined && echartsSymbol !== 'none');
     // PowerPoint radar charts fill the area with a semi-transparent version of the line color
     const isFilled = radarStyle === 'filled';
+    const color = s.colorHex ?? chartPalette?.[idx % chartPalette.length];
+    const areaColor = typeof color === 'string' ? buildFilledRadarAreaColor(color) : color;
     const areaStyle = isFilled
-      ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 0.75 }
+      ? { ...(areaColor ? { color: areaColor } : {}), opacity: 0.75 }
       : undefined;
     return {
       name: s.name,
       value: cwValues,
-      ...(s.colorHex
+      ...(color
         ? {
             lineStyle: {
-              color: s.colorHex,
+              color,
               width: s.lineWidth ?? 3,
               cap: 'round' as const,
               join: 'round' as const,
               ...(s.lineNoFill ? { opacity: 0 } : {}),
             },
-            itemStyle: { color: s.colorHex },
+            itemStyle: { color },
           }
         : {
             lineStyle: {
@@ -2010,7 +2039,14 @@ function buildOptionForChartType(
     case 'doughnutChart':
       return buildPieChartOption(chartTypeNode, chartNode, seriesArr, true, ctx);
     case 'radarChart':
-      return buildRadarChartOption(chartTypeNode, chartNode, seriesArr, ctx, chartSize);
+      return buildRadarChartOption(
+        chartTypeNode,
+        chartNode,
+        seriesArr,
+        ctx,
+        chartPalette,
+        chartSize,
+      );
     case 'scatterChart':
       return buildScatterChartOption(chartTypeNode, chartNode, seriesArr, ctx);
     case 'bubbleChart':
