@@ -3533,6 +3533,7 @@ describe('ChartRenderer', () => {
 
       expect(grid.left).toBe(15);
       expect(grid.right).toBe(28);
+      expect(grid.top).toBe(60);
     });
 
     it('uses PowerPoint-like automatic value axis range for line charts (oracle-pypptx-chart-0007)', () => {

@@ -809,8 +809,9 @@ function buildBarChartOption(
   if (isPercentStacked) forcePercentAxis(valueAxisDef);
   applyAxisInfo(valueAxisDef, valueAxis, 'value');
 
-  const gridTop = getGridTopPx(!!titleOption, legendInfo);
-  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
+  const hasTitle = !!titleOption;
+  const gridTop = isHorizontal && hasTitle ? 60 : getGridTopPx(hasTitle, legendInfo);
+  const legendTopPx = getLegendTopPx(hasTitle, legendInfo);
   // When value axis is hidden, reduce left/right padding so bars use full width
   const gridLeft = isHorizontal ? 15 : valueAxis.deleted ? 4 : 18;
   const gridRight = isHorizontal ? 28 : 10;
