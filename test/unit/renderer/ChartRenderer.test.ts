@@ -4407,7 +4407,7 @@ describe('ChartRenderer', () => {
       expect(series?.smooth).toBe(false);
       expect(series?.showSymbol).toBe(true);
       expect(series?.symbol).toBe('diamond');
-      expect(series?.symbolSize).toBe(14);
+      expect(series?.symbolSize).toBeCloseTo(6.667, 3);
       expect(series?.data?.length).toBe(3);
       expect(series?.data?.[0]).toEqual([10, 100]);
       expect(series?.data?.[1]).toEqual([20, 200]);
@@ -6437,8 +6437,11 @@ describe('ChartRenderer', () => {
       </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
+      const series = (option.series as any[])?.[0];
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
+      expect(series.symbol).toBe('diamond');
+      expect(series.symbolSize).toBeCloseTo(6.667, 3);
       expect(xAxis.max).toBe(10);
       expect(yAxis.interval).toBe(1);
       expect(yAxis.max).toBe(9);
@@ -6589,12 +6592,12 @@ describe('ChartRenderer', () => {
       ]);
       expect(series.lineStyle).toBeUndefined();
       expect(series.symbol).toBe('diamond');
-      expect(series.symbolSize).toBe(14);
+      expect(series.symbolSize).toBeCloseTo(6.667, 3);
 
       const secondSeries = (option.series as any[])[1];
       expect(secondSeries.type).toBe('scatter');
       expect(secondSeries.symbol).toBe('rect');
-      expect(secondSeries.symbolSize).toBe(14);
+      expect(secondSeries.symbolSize).toBeCloseTo(6.667, 3);
 
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
