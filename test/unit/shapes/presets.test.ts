@@ -1092,6 +1092,20 @@ describe('getMultiPathPreset', () => {
     expect(d).toContain('L0,300');
   });
 
+  it('renders flowChartPredefinedProcess with OOXML w/8 side bands (oracle-full-shapeid-0065)', () => {
+    const d = getPresetShapePath('flowChartPredefinedProcess', 500, 300);
+
+    expect(d).toContain('M62.5,0 L62.5,300');
+    expect(d).toContain('M437.5,0 L437.5,300');
+  });
+
+  it('renders flowChartInternalStorage with OOXML w/8 and h/8 guide lines (oracle-full-shapeid-0066)', () => {
+    const d = getPresetShapePath('flowChartInternalStorage', 500, 300);
+
+    expect(d).toContain('M62.5,0 L62.5,300');
+    expect(d).toContain('M0,37.5 L500,37.5');
+  });
+
   it('renders flowChartDisplay with left chevron and right semicircle (oracle-full-shapeid-0088)', () => {
     const d = getPresetShapePath('flowChartDisplay', 600, 300);
     // OOXML: path w=6 h=6, left point at (0,h/2), arc wR=w/6 hR=h/2

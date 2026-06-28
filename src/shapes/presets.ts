@@ -2335,7 +2335,7 @@ presetShapes.set('flowChartInputOutput', (w, h) => {
 });
 
 presetShapes.set('flowChartPredefinedProcess', (w, h) => {
-  const inset = w * 0.1;
+  const inset = w / 8;
   return [
     // Outer rectangle
     `M0,0 L${w},0 L${w},${h} L0,${h} Z`,
@@ -2385,11 +2385,12 @@ presetShapes.set('flowChartData', (w, h) => {
 });
 
 presetShapes.set('flowChartInternalStorage', (w, h) => {
-  const inset = Math.min(w, h) * 0.12;
+  const xInset = w / 8;
+  const yInset = h / 8;
   return [
     `M0,0 L${w},0 L${w},${h} L0,${h} Z`,
-    `M${inset},0 L${inset},${h}`,
-    `M0,${inset} L${w},${inset}`,
+    `M${xInset},0 L${xInset},${h}`,
+    `M0,${yInset} L${w},${yInset}`,
   ].join(' ');
 });
 
