@@ -89,4 +89,28 @@ describe('chart option post-process helpers', () => {
 
     expect(option.grid.right).toBe(99);
   });
+
+  it('keeps extra right legend padding for scatter charts', () => {
+    const option = {
+      grid: { left: 18, right: 10 },
+      legend: {
+        data: [{ name: 'Curve' }],
+        itemWidth: 18,
+        textStyle: { fontSize: 18 },
+      },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'value' },
+      series: [{ type: 'scatter' }],
+    };
+    const chartNode = parseXml(`
+      <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+        <c:plotArea><c:scatterChart/></c:plotArea>
+        <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+      </c:chart>
+    `);
+
+    applyLegendGridMargins(option, chartNode, undefined);
+
+    expect(option.grid.right).toBe(108);
+  });
 });

@@ -208,18 +208,14 @@ export function applyLegendGridMargins(
     }
     const estimatedLegendPx = iconWidth + 8 + maxTextPx + 14;
     const plotArea = chartNode.child('plotArea');
+    const isLineChart = plotArea.child('lineChart').exists();
     const seriesCount = Array.isArray(opt.series) ? opt.series.length : opt.series ? 1 : 0;
     const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
     const categoryCount = Array.isArray(xAxis?.data) ? xAxis.data.length : 0;
     const isDenseSingleSeriesLineRightLegend =
-      posVal === 'r' &&
-      plotArea.child('lineChart').exists() &&
-      seriesCount === 1 &&
-      categoryCount >= 20;
-    const gridMarginPx = Math.max(
-      84,
-      Math.round(estimatedLegendPx + (isDenseSingleSeriesLineRightLegend ? -10 : 0)),
-    );
+      posVal === 'r' && isLineChart && seriesCount === 1 && categoryCount >= 20;
+    const legendPaddingPx = isLineChart ? (isDenseSingleSeriesLineRightLegend ? -10 : 0) : 18;
+    const gridMarginPx = Math.max(84, Math.round(estimatedLegendPx + legendPaddingPx));
 
     if (typeof opt.grid.left === 'string' && opt.grid.left.includes('%')) return;
     if (typeof opt.grid.right === 'string' && opt.grid.right.includes('%')) return;
