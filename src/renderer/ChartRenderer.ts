@@ -215,9 +215,9 @@ function mapOoxmlSymbol(symbol: string | undefined): string | undefined {
 }
 
 const DEFAULT_LINE_MARKER_SCATTER_SYMBOLS = ['diamond', 'rect', 'triangle', 'circle'];
-const DEFAULT_SCATTER_MARKER_SIZE = markerSizeToPx(5);
 const DEFAULT_LINE_MARKER_SYMBOLS = ['diamond', 'square', 'triangle', 'circle'];
 const DEFAULT_LINE_MARKER_SIZE = markerSizeToPx(9);
+const DEFAULT_SCATTER_MARKER_SIZE = DEFAULT_LINE_MARKER_SIZE;
 const DEFAULT_BUBBLE_MAX_DIAMETER = 120;
 
 function defaultScatterSymbol(scatterStyle: string, seriesIndex: number): string {
