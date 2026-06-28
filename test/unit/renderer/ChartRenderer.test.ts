@@ -2075,6 +2075,45 @@ describe('ChartRenderer', () => {
       expect(radar.indicator[1].axisLabel).toBeUndefined();
     });
 
+    it('keeps radar gridlines gray for old theme charts unless axis styling is explicit (oracle-pypptx-chart-0018)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:autoTitleDeleted val="1"/>
+            <c:plotArea>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Player A</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="5"/><c:pt idx="0"><c:v>Speed</c:v></c:pt><c:pt idx="1"><c:v>Power</c:v></c:pt><c:pt idx="2"><c:v>Agility</c:v></c:pt><c:pt idx="3"><c:v>Defense</c:v></c:pt><c:pt idx="4"><c:v>Stamina</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="5"/><c:pt idx="0"><c:v>85</c:v></c:pt><c:pt idx="1"><c:v>70</c:v></c:pt><c:pt idx="2"><c:v>90</c:v></c:pt><c:pt idx="3"><c:v>65</c:v></c:pt><c:pt idx="4"><c:v>75</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:radarChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+      const ctx = createMockRenderContext();
+      ctx.theme = {
+        ...ctx.theme,
+        colorScheme: new Map([
+          ...ctx.theme.colorScheme,
+          ['accent1', '4F81BD'],
+          ['accent2', 'C0504D'],
+        ]),
+      };
+
+      const { option } = parseChartOption(xml, ctx);
+      const radar = option.radar as any;
+
+      expect(radar.splitLine.lineStyle).toMatchObject({ color: '#868686', width: 1 });
+      expect(radar.axisLine.lineStyle.color).toBe('#868686');
+    });
+
     it('maps radar plotArea manualLayout to pixel center and radius (xcloud-plan radar charts)', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -6635,8 +6674,10 @@ describe('ChartRenderer', () => {
       const radarSeries = (option.series as any[])[0];
       expect(radar.center).toEqual(['50%', '55%']);
       expect(radar.radius).toBe('76%');
+      expect(radar.z).toBeGreaterThan(radarSeries.z);
       expect(radar.indicator.every((axis: any) => axis.max === 100)).toBe(true);
       expect(radar.indicator[0].axisLabel.formatter(100)).toBe('100');
+      expect(radar.indicator[0].axisLabel.color).toBe('#000000');
       expect(radar.splitLine).toMatchObject({ show: false });
       const areaFill = radarSeries.data[0].areaStyle.color;
       expect(areaFill).toMatchObject({ x: 0, y: 0, x2: 0, y2: 1 });

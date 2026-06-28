@@ -1295,21 +1295,27 @@ function buildRadarChartOption(
   }
 
   const showValueAxisLabels = !valueAxis.deleted && valueAxis.tickLblPos !== 'none';
+  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const valueAxisLabel = showValueAxisLabels
     ? {
         show: true,
         formatter: (val: number) => formatValue(val, valueAxis.numFmt),
-        ...(valueAxis.labelColor ? { color: valueAxis.labelColor } : {}),
+        color: valueAxis.labelColor ?? '#000000',
         ...(valueAxis.labelFontSize !== undefined ? { fontSize: valueAxis.labelFontSize } : {}),
       }
     : undefined;
   // Read radar style to determine default marker/grid behavior
-  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
-  const hasExplicitRadarSplitLineStyle = plotArea
-    .child('valAx')
+  const filledRadarLayering =
+    radarStyle === 'filled' ? { radarZ: 4, seriesZ: 2 } : { radarZ: undefined, seriesZ: undefined };
+  const valueAxisId = chartTypeNode.children('axId')[1]?.attr('val');
+  const radarValueAxisNode =
+    plotArea.children('valAx').find((axis) => axis.child('axId').attr('val') === valueAxisId) ??
+    plotArea.child('valAx');
+  const hasExplicitRadarSplitLineStyle = radarValueAxisNode
     .child('majorGridlines')
     .child('spPr')
     .exists();
+  const hasExplicitRadarAxisLineStyle = radarValueAxisNode.child('spPr').child('ln').exists();
   const showRadarSplitLine =
     valueAxis.hasMajorGridlines && (radarStyle !== 'filled' || hasExplicitRadarSplitLineStyle);
   const radarSplitLine = showRadarSplitLine
@@ -1317,7 +1323,7 @@ function buildRadarChartOption(
         show: true,
         lineStyle: {
           ...DEFAULT_RADAR_GRIDLINE_STYLE,
-          ...(valueAxis.majorGridlineStyle ?? {}),
+          ...(hasExplicitRadarSplitLineStyle ? (valueAxis.majorGridlineStyle ?? {}) : {}),
         },
       }
     : { show: false };
@@ -1325,7 +1331,11 @@ function buildRadarChartOption(
     ? { show: false }
     : {
         show: true,
-        lineStyle: { color: valueAxis.lineColor ?? DEFAULT_RADAR_GRIDLINE_STYLE.color },
+        lineStyle: {
+          color: hasExplicitRadarAxisLineStyle
+            ? (valueAxis.lineColor ?? DEFAULT_RADAR_GRIDLINE_STYLE.color)
+            : DEFAULT_RADAR_GRIDLINE_STYLE.color,
+        },
       };
 
   // PowerPoint radar charts place categories clockwise from top,
@@ -1420,6 +1430,7 @@ function buildRadarChartOption(
       legendTextStyle,
     ),
     radar: {
+      ...(filledRadarLayering.radarZ !== undefined ? { z: filledRadarLayering.radarZ } : {}),
       indicator,
       radius: radarRadius,
       center: radarCenter,
@@ -1431,6 +1442,7 @@ function buildRadarChartOption(
     series: [
       {
         type: 'radar' as const,
+        ...(filledRadarLayering.seriesZ !== undefined ? { z: filledRadarLayering.seriesZ } : {}),
         data: radarData,
       },
     ],
