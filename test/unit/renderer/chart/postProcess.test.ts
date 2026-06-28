@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyLegendGridMargins,
   applyDefaultTextColors,
   applyNiceAxisRange,
 } from '../../../../src/renderer/chart/postProcess';
+import { parseXml } from '../../../../src/parser/XmlParser';
 
 describe('chart option post-process helpers', () => {
   it('fills Office-like default text colors when chart text omits explicit color', () => {
@@ -63,5 +65,28 @@ describe('chart option post-process helpers', () => {
     expect(option.yAxis.min).toBe(0);
     expect(option.yAxis.max).toBe(160);
     expect(option.yAxis.interval).toBe(20);
+  });
+
+  it('uses compact right legend margins for line charts', () => {
+    const option = {
+      grid: { left: 18, right: 10 },
+      legend: {
+        data: [{ name: 'Actual' }, { name: 'Target' }],
+        itemWidth: 18,
+        textStyle: { fontSize: 18 },
+      },
+      xAxis: { data: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'] },
+      series: [{ type: 'line' }, { type: 'line' }],
+    };
+    const chartNode = parseXml(`
+      <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+        <c:plotArea><c:lineChart/></c:plotArea>
+        <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+      </c:chart>
+    `);
+
+    applyLegendGridMargins(option, chartNode, undefined);
+
+    expect(option.grid.right).toBe(99);
   });
 });

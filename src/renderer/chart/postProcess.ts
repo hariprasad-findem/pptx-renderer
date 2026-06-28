@@ -218,7 +218,7 @@ export function applyLegendGridMargins(
       categoryCount >= 20;
     const gridMarginPx = Math.max(
       84,
-      Math.round(estimatedLegendPx + (isDenseSingleSeriesLineRightLegend ? -10 : 18)),
+      Math.round(estimatedLegendPx + (isDenseSingleSeriesLineRightLegend ? -10 : 0)),
     );
 
     if (typeof opt.grid.left === 'string' && opt.grid.left.includes('%')) return;
