@@ -889,10 +889,10 @@ function getMarkerDimensions(
 ): { markerW: number; markerH: number } {
   const wMul = getMarkerSize(info.w);
   const lenMul = getMarkerSize(info.len);
-  // Arrow size proportional to stroke width with balanced floor:
-  // avoid tiny markers, but do not overgrow relative to line length.
-  const baseLen = Math.max(strokeWidth * 3, 6.5);
-  const baseW = Math.max(strokeWidth * 2.5, 5);
+  // Arrow size proportional to stroke width with an Office-like floor for
+  // very thin connectors; otherwise default triangle markers look too skinny.
+  const baseLen = Math.max(strokeWidth * 3, 10);
+  const baseW = Math.max(strokeWidth * 2.5, 7.5);
   return {
     markerW: baseLen * lenMul,
     markerH: baseW * wMul,
@@ -938,6 +938,24 @@ function getGradientMarkerColor(
 }
 
 type Point = { x: number; y: number };
+type CubicSegment = { c1: Point; c2: Point; end: Point };
+type ArcSegment = {
+  rx: number;
+  ry: number;
+  xAxisRotation: number;
+  largeArc: 0 | 1;
+  sweep: 0 | 1;
+  end: Point;
+};
+type ArcDescription = {
+  center: Point;
+  rx: number;
+  ry: number;
+  startAngle: number;
+  deltaAngle: number;
+  xAxisRotation: number;
+  sweep: 0 | 1;
+};
 
 function lerpPoint(a: Point, b: Point, t: number): Point {
   return {
@@ -965,6 +983,172 @@ function approximateCubicLength(p0: Point, p1: Point, p2: Point, p3: Point, tEnd
     prev = point;
   }
   return length;
+}
+
+function parseMoveCubicPath(pathD: string): { start: Point; segments: CubicSegment[] } | null {
+  const tokens = pathD.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  if (tokens.length < 8 || tokens[0] !== 'M') return null;
+
+  let i = 1;
+  const readPoint = (): Point | null => {
+    if (i + 1 >= tokens.length) return null;
+    const x = Number(tokens[i++]);
+    const y = Number(tokens[i++]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+
+  const start = readPoint();
+  if (!start) return null;
+
+  const segments: CubicSegment[] = [];
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd !== 'C') return null;
+    const c1 = readPoint();
+    const c2 = readPoint();
+    const end = readPoint();
+    if (!c1 || !c2 || !end) return null;
+    segments.push({ c1, c2, end });
+  }
+
+  return segments.length > 0 ? { start, segments } : null;
+}
+
+function formatMoveCubicPath(start: Point, segments: CubicSegment[]): string {
+  const out = [`M${formatPathNumber(start.x)},${formatPathNumber(start.y)}`];
+  for (const segment of segments) {
+    out.push(
+      [
+        `C${formatPathNumber(segment.c1.x)},${formatPathNumber(segment.c1.y)}`,
+        `${formatPathNumber(segment.c2.x)},${formatPathNumber(segment.c2.y)}`,
+        `${formatPathNumber(segment.end.x)},${formatPathNumber(segment.end.y)}`,
+      ].join(' '),
+    );
+  }
+  return out.join(' ');
+}
+
+function parseMoveArcPath(pathD: string): { start: Point; arc: ArcSegment } | null {
+  const tokens = pathD.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  if (tokens.length !== 11 || tokens[0] !== 'M') return null;
+  if (tokens[3] !== 'A') return null;
+
+  const start = { x: Number(tokens[1]), y: Number(tokens[2]) };
+  const arc: ArcSegment = {
+    rx: Number(tokens[4]),
+    ry: Number(tokens[5]),
+    xAxisRotation: Number(tokens[6]),
+    largeArc: Number(tokens[7]) ? 1 : 0,
+    sweep: Number(tokens[8]) ? 1 : 0,
+    end: { x: Number(tokens[9]), y: Number(tokens[10]) },
+  };
+  if (
+    !Number.isFinite(start.x) ||
+    !Number.isFinite(start.y) ||
+    !Number.isFinite(arc.rx) ||
+    !Number.isFinite(arc.ry) ||
+    !Number.isFinite(arc.xAxisRotation) ||
+    !Number.isFinite(arc.end.x) ||
+    !Number.isFinite(arc.end.y)
+  ) {
+    return null;
+  }
+
+  return { start, arc };
+}
+
+function vectorAngle(ux: number, uy: number, vx: number, vy: number): number {
+  const dot = ux * vx + uy * vy;
+  const len = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+  const angle = Math.acos(Math.min(1, Math.max(-1, len > 0 ? dot / len : 1)));
+  return ux * vy - uy * vx < 0 ? -angle : angle;
+}
+
+function describeArc(start: Point, arc: ArcSegment): ArcDescription | null {
+  if (arc.xAxisRotation !== 0) return null;
+  let rx = Math.abs(arc.rx);
+  let ry = Math.abs(arc.ry);
+  if (!(rx > 0) || !(ry > 0)) return null;
+
+  const dx = (start.x - arc.end.x) / 2;
+  const dy = (start.y - arc.end.y) / 2;
+  const lambda = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+  if (lambda > 1) {
+    const scale = Math.sqrt(lambda);
+    rx *= scale;
+    ry *= scale;
+  }
+
+  const rx2 = rx * rx;
+  const ry2 = ry * ry;
+  const dx2 = dx * dx;
+  const dy2 = dy * dy;
+  const denom = rx2 * dy2 + ry2 * dx2;
+  if (!(denom > 0)) return null;
+
+  const sign = arc.largeArc === arc.sweep ? -1 : 1;
+  const coef = sign * Math.sqrt(Math.max(0, (rx2 * ry2 - rx2 * dy2 - ry2 * dx2) / denom));
+  const cxp = (coef * rx * dy) / ry;
+  const cyp = (-coef * ry * dx) / rx;
+  const center = {
+    x: (start.x + arc.end.x) / 2 + cxp,
+    y: (start.y + arc.end.y) / 2 + cyp,
+  };
+  const ux = (dx - cxp) / rx;
+  const uy = (dy - cyp) / ry;
+  const vx = (-dx - cxp) / rx;
+  const vy = (-dy - cyp) / ry;
+  const startAngle = Math.atan2(uy, ux);
+  let deltaAngle = vectorAngle(ux, uy, vx, vy);
+  if (arc.sweep === 0 && deltaAngle > 0) deltaAngle -= Math.PI * 2;
+  if (arc.sweep === 1 && deltaAngle < 0) deltaAngle += Math.PI * 2;
+
+  return {
+    center,
+    rx,
+    ry,
+    startAngle,
+    deltaAngle,
+    xAxisRotation: arc.xAxisRotation,
+    sweep: arc.sweep,
+  };
+}
+
+function arcPoint(desc: ArcDescription, t: number): Point {
+  const angle = desc.startAngle + desc.deltaAngle * t;
+  return {
+    x: desc.center.x + desc.rx * Math.cos(angle),
+    y: desc.center.y + desc.ry * Math.sin(angle),
+  };
+}
+
+function approximateArcLength(desc: ArcDescription, tEnd: number): number {
+  const steps = 24;
+  let length = 0;
+  let prev = arcPoint(desc, 0);
+  for (let i = 1; i <= steps; i++) {
+    const point = arcPoint(desc, (tEnd * i) / steps);
+    length += Math.hypot(point.x - prev.x, point.y - prev.y);
+    prev = point;
+  }
+  return length;
+}
+
+function formatMoveArcPath(
+  start: Point,
+  desc: ArcDescription,
+  sweepFraction: number,
+  end: Point,
+): string {
+  const largeArc = Math.abs(desc.deltaAngle * sweepFraction) > Math.PI ? 1 : 0;
+  return [
+    `M${formatPathNumber(start.x)},${formatPathNumber(start.y)}`,
+    `A${formatPathNumber(desc.rx)},${formatPathNumber(desc.ry)}`,
+    formatPathNumber(desc.xAxisRotation),
+    `${largeArc},${desc.sweep}`,
+    `${formatPathNumber(end.x)},${formatPathNumber(end.y)}`,
+  ].join(' ');
 }
 
 function insetCubicPathStart(pathD: string, inset: number): string {
@@ -1002,13 +1186,92 @@ function insetCubicPathStart(pathD: string, inset: number): string {
   return rest ? `${trimmed} ${rest}` : trimmed;
 }
 
+function insetArcPathStart(pathD: string, inset: number): string | null {
+  const parsed = parseMoveArcPath(pathD);
+  if (!parsed) return null;
+  const desc = describeArc(parsed.start, parsed.arc);
+  if (!desc) return null;
+  const totalLength = approximateArcLength(desc, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateArcLength(desc, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  return formatMoveArcPath(arcPoint(desc, t), desc, 1 - t, parsed.arc.end);
+}
+
+function insetCubicPathEnd(pathD: string, inset: number): string | null {
+  const parsed = parseMoveCubicPath(pathD);
+  if (!parsed) return null;
+
+  const lastIndex = parsed.segments.length - 1;
+  const lastStart = lastIndex === 0 ? parsed.start : parsed.segments[lastIndex - 1].end;
+  const last = parsed.segments[lastIndex];
+  const totalLength = approximateCubicLength(lastStart, last.c1, last.c2, last.end, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = totalLength - Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateCubicLength(lastStart, last.c1, last.c2, last.end, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  const a = lerpPoint(lastStart, last.c1, t);
+  const b = lerpPoint(last.c1, last.c2, t);
+  const c = lerpPoint(last.c2, last.end, t);
+  const d = lerpPoint(a, b, t);
+  const trimmedEnd = lerpPoint(d, lerpPoint(b, c, t), t);
+  const nextSegments = parsed.segments.slice();
+  nextSegments[lastIndex] = { c1: a, c2: d, end: trimmedEnd };
+
+  return formatMoveCubicPath(parsed.start, nextSegments);
+}
+
+function insetArcPathEnd(pathD: string, inset: number): string | null {
+  const parsed = parseMoveArcPath(pathD);
+  if (!parsed) return null;
+  const desc = describeArc(parsed.start, parsed.arc);
+  if (!desc) return null;
+  const totalLength = approximateArcLength(desc, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = totalLength - Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateArcLength(desc, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  return formatMoveArcPath(parsed.start, desc, t, arcPoint(desc, t));
+}
+
 function insetPathStart(pathD: string, inset: number): string {
   if (!(inset > 0)) return pathD;
 
   const match = pathD.match(
     /^M(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?) L(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?)$/i,
   );
-  if (!match) return insetCubicPathStart(pathD, inset);
+  if (!match) {
+    return (
+      insetMoveLinePathStart(pathD, inset) ??
+      insetArcPathStart(pathD, inset) ??
+      insetCubicPathStart(pathD, inset)
+    );
+  }
 
   const x1 = Number(match[1]);
   const y1 = Number(match[2]);
@@ -1031,7 +1294,14 @@ function insetPathEnd(pathD: string, inset: number): string {
   const match = pathD.match(
     /^M(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?) L(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?)$/i,
   );
-  if (!match) return pathD;
+  if (!match) {
+    return (
+      insetMoveLinePathEnd(pathD, inset) ??
+      insetCubicPathEnd(pathD, inset) ??
+      insetArcPathEnd(pathD, inset) ??
+      pathD
+    );
+  }
 
   const x1 = Number(match[1]);
   const y1 = Number(match[2]);
@@ -1046,6 +1316,125 @@ function insetPathEnd(pathD: string, inset: number): string {
   const nextX = x2 - (dx / length) * clampedInset;
   const nextY = y2 - (dy / length) * clampedInset;
   return `M${x1},${y1} L${nextX},${nextY}`;
+}
+
+function parseMoveLinePath(pathD: string): Point[] | null {
+  const tokens = pathD.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  if (tokens.length < 3 || tokens[0] !== 'M') return null;
+
+  const points: Point[] = [];
+  let i = 1;
+  const readPoint = (): Point | null => {
+    if (i + 1 >= tokens.length) return null;
+    const x = Number(tokens[i++]);
+    const y = Number(tokens[i++]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+
+  const first = readPoint();
+  if (!first) return null;
+  points.push(first);
+
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd !== 'L') return null;
+    const point = readPoint();
+    if (!point) return null;
+    points.push(point);
+  }
+
+  return points.length >= 2 ? points : null;
+}
+
+function formatMoveLinePath(points: Point[]): string {
+  return points
+    .map((point, index) => {
+      const command = index === 0 ? 'M' : 'L';
+      return `${command}${formatPathNumber(point.x)},${formatPathNumber(point.y)}`;
+    })
+    .join(' ');
+}
+
+function pointDistance(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function insetMoveLinePathStart(pathD: string, inset: number): string | null {
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return null;
+
+  const first = points[0];
+  const next = points[1];
+  const dx = next.x - first.x;
+  const dy = next.y - first.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > inset)) return null;
+
+  const nextStart = {
+    x: first.x + (dx / length) * inset,
+    y: first.y + (dy / length) * inset,
+  };
+  return formatMoveLinePath([nextStart, ...points.slice(1)]);
+}
+
+function insetMoveLinePathEnd(pathD: string, inset: number): string | null {
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return null;
+
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const dx = last.x - prev.x;
+  const dy = last.y - prev.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > inset)) return null;
+
+  const nextEnd = {
+    x: last.x - (dx / length) * inset,
+    y: last.y - (dy / length) * inset,
+  };
+  return formatMoveLinePath([...points.slice(0, -1), nextEnd]);
+}
+
+const MIN_TINY_MARKER_SEGMENT_PX = 2;
+const MAX_TINY_MARKER_SEGMENT_PX = 4;
+
+function collapseTinyMarkerEndSegments(
+  pathD: string,
+  strokeWidth: number,
+  hasHeadEnd: boolean,
+  hasTailEnd: boolean,
+): string {
+  if (!hasHeadEnd && !hasTailEnd) return pathD;
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return pathD;
+
+  // PowerPoint ignores sub-pixel connector residual legs for marker orientation,
+  // but intentional short elbows should still remain part of the visible path.
+  const threshold = Math.min(
+    Math.max(MIN_TINY_MARKER_SEGMENT_PX, strokeWidth * 1.5),
+    MAX_TINY_MARKER_SEGMENT_PX,
+  );
+  let nextPoints = points.slice();
+
+  if (hasHeadEnd && nextPoints.length >= 3) {
+    const firstLen = pointDistance(nextPoints[0], nextPoints[1]);
+    const nextLen = pointDistance(nextPoints[1], nextPoints[2]);
+    if (firstLen <= threshold && nextLen > threshold) {
+      nextPoints = nextPoints.slice(1);
+    }
+  }
+
+  if (hasTailEnd && nextPoints.length >= 3) {
+    const last = nextPoints.length - 1;
+    const lastLen = pointDistance(nextPoints[last - 1], nextPoints[last]);
+    const prevLen = pointDistance(nextPoints[last - 2], nextPoints[last - 1]);
+    if (lastLen <= threshold && prevLen > threshold) {
+      nextPoints = nextPoints.slice(0, -1);
+    }
+  }
+
+  return nextPoints.length === points.length ? pathD : formatMoveLinePath(nextPoints);
 }
 
 /**
@@ -1750,6 +2139,15 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       }
       const effectiveStrokeLinecap =
         isLineLike && (effectiveHeadEnd || effectiveTailEnd) ? 'butt' : strokeLinecap;
+      if (isLineLike && (effectiveHeadEnd || effectiveTailEnd) && effectiveStrokeWidth > 0) {
+        pathD = collapseTinyMarkerEndSegments(
+          pathD,
+          effectiveStrokeWidth,
+          !!effectiveHeadEnd,
+          !!effectiveTailEnd,
+        );
+        path.setAttribute('d', pathD);
+      }
       if (isLineLike && effectiveHeadEnd && effectiveStrokeWidth > 0) {
         const headInset = getHeadEndStartInset(effectiveHeadEnd, effectiveStrokeWidth);
         if (headInset > 0) {

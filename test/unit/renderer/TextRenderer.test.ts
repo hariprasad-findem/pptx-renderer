@@ -75,6 +75,50 @@ describe('TextRenderer — renderTextBody', () => {
       expect(container.textContent).toContain('Hello World');
     });
 
+    it('keeps compact numeric percentage tokens on one line (issue #4)', () => {
+      for (const text of ['80% ', '15 %']) {
+        const body = makeTextBody({
+          paragraphs: [
+            {
+              runs: [
+                {
+                  text,
+                  properties: xmlNode('<rPr lang="en-US" sz="4800"/>'),
+                },
+              ],
+              level: 0,
+            },
+          ],
+        });
+
+        const container = renderToContainer(body);
+        const span = container.querySelector('span');
+
+        expect(span?.textContent).toBe(text);
+        expect(span?.style.whiteSpace).toBe('nowrap');
+      }
+    });
+
+    it('does not create arbitrary wrap points between adjacent numeric percentage runs', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '80' }, { text: '%' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const paragraph = container.querySelector('div');
+      const group = paragraph?.querySelector(':scope > span');
+
+      expect(container.textContent).toBe('80%');
+      expect(paragraph?.style.overflowWrap).toBe('anywhere');
+      expect(group?.textContent).toBe('80%');
+      expect(group?.style.whiteSpace).toBe('nowrap');
+    });
+
     it('parses OOXML boolean aliases for paragraph rtl direction', () => {
       const body = makeTextBody({
         paragraphs: [

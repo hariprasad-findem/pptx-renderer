@@ -20,6 +20,44 @@ import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
 // Style Inheritance Helpers
 // ---------------------------------------------------------------------------
 
+function isCompactNumericToken(text: string | undefined): boolean {
+  if (!text) return false;
+  const token = text.trim();
+  if (token.length === 0 || token.length > 32) return false;
+  return /^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)\s*(?:%|[A-Za-z]{1,4})?$/.test(
+    token,
+  );
+}
+
+function findCompactNumericRunGroups(runs: TextRun[]): Map<number, number> {
+  const groups = new Map<number, number>();
+  let nextGroupId = 1;
+
+  for (let i = 0; i < runs.length; i++) {
+    if (groups.has(i)) continue;
+
+    let text = '';
+    let bestEnd = -1;
+    for (let j = i; j < runs.length && j < i + 4; j++) {
+      const part = runs[j].text;
+      if (part === undefined || part === '\n' || part.includes('\t')) break;
+      text += part;
+      if (text.trim().length > 32) break;
+      if (j > i && isCompactNumericToken(text)) bestEnd = j;
+    }
+
+    if (bestEnd > i) {
+      const groupId = nextGroupId++;
+      for (let k = i; k <= bestEnd; k++) {
+        groups.set(k, groupId);
+      }
+      i = bestEnd;
+    }
+  }
+
+  return groups;
+}
+
 /**
  * Find paragraph properties at a specific indent level from a list style node.
  * Tries lvl{n}pPr (where n = level + 1), then falls back to defPPr.
@@ -1039,6 +1077,8 @@ export function renderTextBody(
     }
 
     // ---- Render runs ----
+    const compactNumericRunGroups = findCompactNumericRunGroups(paragraph.runs);
+    const compactNumericGroupElements = new Map<number, HTMLElement>();
     if (paragraph.runs.length === 0) {
       // Empty paragraph — still need to maintain spacing
       paraDiv.appendChild(document.createElement('br'));
@@ -1063,7 +1103,7 @@ export function renderTextBody(
       paraDiv.appendChild(currentLineDiv);
     }
 
-    for (const run of paragraph.runs) {
+    for (const [runIndex, run] of paragraph.runs.entries()) {
       if (run.text === '\n') {
         if (useLineWrappers) {
           // Close current line div and start a new one
@@ -1152,6 +1192,10 @@ export function renderTextBody(
         element.innerHTML = escaped;
       } else {
         element.textContent = run.text;
+      }
+      if (isCompactNumericToken(run.text)) {
+        // Office keeps compact number/unit tokens together, e.g. "80%" or "15 %".
+        element.style.whiteSpace = 'nowrap';
       }
 
       // Apply run styles (with normAutofit fontScale)
@@ -1329,7 +1373,19 @@ export function renderTextBody(
       // Append to the current line wrapper (when using absolute line spacing)
       // or directly to the paragraph div
       const appendTarget = currentLineDiv ?? paraDiv;
-      appendTarget.appendChild(element);
+      const compactGroupId = compactNumericRunGroups.get(runIndex);
+      if (compactGroupId !== undefined) {
+        let group = compactNumericGroupElements.get(compactGroupId);
+        if (!group) {
+          group = document.createElement('span');
+          group.style.whiteSpace = 'nowrap';
+          compactNumericGroupElements.set(compactGroupId, group);
+          appendTarget.appendChild(group);
+        }
+        group.appendChild(element);
+      } else {
+        appendTarget.appendChild(element);
+      }
     }
 
     // endParaRPr: when the paragraph ends with a line break (trailing \n),

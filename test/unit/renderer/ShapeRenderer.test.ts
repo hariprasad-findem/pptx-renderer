@@ -282,6 +282,86 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
   });
 
+  it('orients a bentConnector3 tailEnd from the prior segment when the terminal leg is tiny (issue #3 slide 2)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="62" name="连接符: 肘形 61"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1">
+            <a:off x="0" y="0"/>
+            <a:ext cx="2406175" cy="152650"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 99825"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="12700">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const marker = el.querySelector('defs marker');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const prevX = numbers[numbers.length - 4];
+    const prevY = numbers[numbers.length - 3];
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(Number.parseFloat(marker?.getAttribute('markerWidth') ?? '0')).toBeCloseTo(10, 3);
+    expect(Number.parseFloat(marker?.getAttribute('markerHeight') ?? '0')).toBeCloseTo(7.5, 3);
+    expect(endX).toBeCloseTo(prevX, 3);
+    expect(endY).toBeGreaterThan(prevY);
+    expect(endY).toBeCloseTo(6.026, 3);
+  });
+
+  it('preserves intentional short connector terminal legs even when the stroke is thick', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="63" name="Thick bent connector"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="1000000" cy="400000"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 88000"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="190500">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const prevX = numbers[numbers.length - 4];
+    const prevY = numbers[numbers.length - 3];
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(endX).toBeGreaterThan(prevX + 10);
+    expect(endY).toBeCloseTo(prevY, 3);
+  });
+
   it('keeps tailEnd marker visible when gradient stroke fades to transparent (xcloud-solution slide 45)', () => {
     const xml = `
       <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -391,6 +471,141 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('d')).toContain(' C');
     expect(pathNumbers[0]).toBeGreaterThan(10);
     expect(pathNumbers[1]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('insets curved connector tailEnd so the arrow tip stays anchored', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="64" name="Curved connector tail"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="914400" cy="914400"/>
+          </a:xfrm>
+          <a:prstGeom prst="curvedConnector2"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const marker = el.querySelector('marker');
+    const pathNumbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const endX = pathNumbers[pathNumbers.length - 2];
+    const endY = pathNumbers[pathNumbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' C');
+    expect(Number.parseFloat(marker?.getAttribute('markerWidth') ?? '0')).toBeCloseTo(10, 3);
+    expect(endX).toBeGreaterThan(95);
+    expect(endX).toBeLessThanOrEqual(96);
+    expect(endY).toBeLessThan(90);
+  });
+
+  it('insets the tailEnd of multi-segment curved connectors on the final cubic segment', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="65" name="Multi curved connector tail"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="914400" cy="914400"/>
+          </a:xfrm>
+          <a:prstGeom prst="curvedConnector4"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const pathD = path?.getAttribute('d') ?? '';
+    const pathNumbers = extractPathNumbers(pathD);
+    const endX = pathNumbers[pathNumbers.length - 2];
+    const endY = pathNumbers[pathNumbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(pathD.match(/\bC/g)?.length).toBe(3);
+    expect(endX).toBeGreaterThan(90);
+    expect(endX).toBeLessThanOrEqual(96);
+    expect(endY).toBeLessThan(90);
+  });
+
+  it('insets arc tailEnd so the arrow tip stays anchored on the original endpoint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="66" name="Arc tail"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="arc"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' A');
+    expect(endX).toBeLessThan(200);
+    expect(endY).toBeLessThan(50);
+  });
+
+  it('insets arc headEnd so the arrow tip stays anchored on the original startpoint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="67" name="Arc head"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="arc"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:headEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const startX = numbers[0];
+    const startY = numbers[1];
+
+    expect(path?.getAttribute('marker-start')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' A');
+    expect(startX).toBeGreaterThan(100);
+    expect(startY).toBeGreaterThan(0);
   });
 
   it('renders lineInv using theme lnRef stroke when shape has no explicit <a:ln>', () => {
@@ -3895,9 +4110,9 @@ describe('ShapeRenderer', () => {
     `;
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
-    const horizontalStops = Array.from(
-      el.querySelectorAll('linearGradient[id$="-h"] stop'),
-    ).map((stop) => stop.getAttribute('offset'));
+    const horizontalStops = Array.from(el.querySelectorAll('linearGradient[id$="-h"] stop')).map(
+      (stop) => stop.getAttribute('offset'),
+    );
 
     expect(horizontalStops).toContain('25.00%');
     expect(horizontalStops).toContain('75.00%');
