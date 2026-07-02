@@ -358,6 +358,42 @@ describe('TextRenderer — renderTextBody', () => {
       expect(span!.style.fontSize).toBe('24pt');
     });
 
+    it('ignores master otherStyle paragraph alignment for non-placeholder text boxes', () => {
+      const ctx = createMockRenderContext();
+      // Master otherStyle carries right alignment (and a character default), while
+      // presentation defaultTextStyle is left. PowerPoint left-aligns plain text
+      // boxes: only the character default (defRPr) may come from otherStyle.
+      ctx.master.textStyles.otherStyle = parseXml(`
+        <p:otherStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:lvl1pPr algn="r"><a:defRPr sz="2400"/></a:lvl1pPr>
+        </p:otherStyle>
+      `);
+      ctx.presentation.defaultTextStyle = parseXml(`
+        <p:defaultTextStyle xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:lvl1pPr algn="l"/>
+        </p:defaultTextStyle>
+      `);
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr/>'),
+            runs: [{ text: 'Fila / Coastal Sunbelt Produce', properties: xmlNode('<rPr/>') }],
+            level: 0,
+          },
+        ],
+      });
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+
+      const paragraph = container.querySelector('div') as HTMLElement;
+      const span = container.querySelector('span');
+      expect(paragraph.style.textAlign).toBe('left');
+      expect(span!.style.fontSize).toBe('24pt');
+    });
+
     it('applies text color from rPr solidFill', () => {
       const body = makeTextBody({
         paragraphs: [

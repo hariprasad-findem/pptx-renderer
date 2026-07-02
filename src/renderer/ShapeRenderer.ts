@@ -2932,6 +2932,12 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           }
           let scale = 1;
           const fitWidthOnly = usesNoAutofitSingleLineTitleFit || usesImplicitSingleLineFit;
+          // spAutoFit means the shape grows to fit the text (PowerPoint recomputes the
+          // stored extent on open). In 'grow' mode (default) never shrink such text
+          // vertically to a stale stored height — let it wrap at the shape width and
+          // overflow downward instead. 'bounded' keeps the legacy shrink-to-bounds fit.
+          const spAutoFitGrowsToFitText =
+            hasSpAutoFit && !hasNormAutofit && ctx.textAutofit !== 'bounded';
           const usesUnwrappedNoScaleFit =
             hasSpAutoFit &&
             !hasNormAutofit &&
@@ -2959,7 +2965,13 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               hasSpAutoFit &&
               !hasNormAutofit &&
               isSingleLineSpAutoFit &&
-              (textWrap === undefined || textWrap === 'none' || hasCenteredParagraphs);
+              // wrap defaults to "square": in 'grow' mode PowerPoint wraps the
+              // paragraph inside the shape width and grows the shape, so only treat
+              // explicit wrap="none" (or fully centered display text) as single-line
+              // width-fit. 'bounded' mode keeps the legacy default-wrap width-fit.
+              (textWrap === 'none' ||
+                hasCenteredParagraphs ||
+                (ctx.textAutofit === 'bounded' && textWrap === undefined));
             const canUseUnwrappedWidthScale =
               !hasSpAutoFit ||
               hasNormAutofit ||
@@ -2985,6 +2997,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             textContainer.style.whiteSpace = 'nowrap';
           }
           if (
+            !spAutoFitGrowsToFitText &&
             !fitWidthOnly &&
             !usesUnwrappedNoScaleFit &&
             !usesUnwrappedWidthFit &&
@@ -2996,6 +3009,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             scale = Math.min(scale, containerH / contentH);
           }
           if (
+            !spAutoFitGrowsToFitText &&
             !fitWidthOnly &&
             !usesUnwrappedNoScaleFit &&
             !usesUnwrappedWidthFit &&
@@ -3016,7 +3030,8 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             textContainer.style.height = expandCssLengthForScale(baseHeight, scale);
           } else if (
             hasToleratedVerticalMetricOverhang ||
-            hasIgnoredImplicitSingleLineVerticalOverflow
+            hasIgnoredImplicitSingleLineVerticalOverflow ||
+            (spAutoFitGrowsToFitText && !wrappedHeightFits)
           ) {
             textContainer.style.overflowY = 'visible';
           }

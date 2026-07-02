@@ -42,6 +42,8 @@ export interface SlideRendererOptions {
   pdfjs?: PdfjsConfig;
   /** Shared set of live ECharts instances for explicit disposal. */
   chartInstances?: Set<ECharts>;
+  /** spAutoFit text handling: 'grow' (default, PowerPoint-faithful) or 'bounded' (legacy shrink-to-bounds). */
+  textAutofit?: 'grow' | 'bounded';
 }
 
 /**
@@ -267,6 +269,9 @@ export function renderSlide(
   ctx.asyncTasks = asyncTasks;
   if (options?.onNavigate) {
     ctx.onNavigate = options.onNavigate;
+  }
+  if (options?.textAutofit) {
+    ctx.textAutofit = options.textAutofit;
   }
 
   // Create slide container

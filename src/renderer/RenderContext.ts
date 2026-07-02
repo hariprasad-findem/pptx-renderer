@@ -38,6 +38,14 @@ export interface RenderContext {
   /** Template rendering skips placeholder descendants inside groups as well as top-level shapes. */
   skipPlaceholderChildren?: boolean;
   /**
+   * spAutoFit text handling. 'grow' (default) follows PowerPoint: text wraps at the
+   * shape width, keeps its font size, and overflows the stored shape height
+   * (PowerPoint recomputes the extent on open, so stored heights can be stale —
+   * common in programmatically filled decks). 'bounded' keeps the legacy behavior
+   * of shrinking text so it never bleeds outside the stored shape bounds.
+   */
+  textAutofit?: 'grow' | 'bounded';
+  /**
    * Navigation callback for shape-level hyperlink actions (action buttons, clickable shapes).
    * Called with target slide index (0-based) for supported internal slide actions,
    * or with a URL string for external links.

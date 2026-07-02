@@ -1092,7 +1092,10 @@ describe('ShapeRenderer', () => {
         </p:sp>
       `;
 
-      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const el = renderShape(
+        parseShapeNode(parseXml(xml)),
+        createMockRenderContext({ textAutofit: 'bounded' }),
+      );
       const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
         div.textContent?.includes('Overflow text'),
       ) as HTMLElement | undefined;
@@ -1153,7 +1156,7 @@ describe('ShapeRenderer', () => {
       const shapeNode = parseShapeNode(parseXml(xml));
       shapeNode.textBoxBounds = { x: 4, y: 6, w: 120, h: 60 };
 
-      const el = renderShape(shapeNode, createMockRenderContext());
+      const el = renderShape(shapeNode, createMockRenderContext({ textAutofit: 'bounded' }));
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
           div.textContent?.includes('Measured bounded text') &&
@@ -1218,7 +1221,10 @@ describe('ShapeRenderer', () => {
         </p:sp>
       `;
 
-      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const el = renderShape(
+        parseShapeNode(parseXml(xml)),
+        createMockRenderContext({ textAutofit: 'bounded' }),
+      );
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) => div.textContent?.includes('异构算力纳管') && div.style.flexDirection === 'column',
       ) as HTMLElement | undefined;
@@ -2262,7 +2268,10 @@ describe('ShapeRenderer', () => {
         </p:sp>
       `;
 
-      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const el = renderShape(
+        parseShapeNode(parseXml(xml)),
+        createMockRenderContext({ textAutofit: 'bounded' }),
+      );
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
           div.textContent?.includes('Dominant Resource Fairness') &&
@@ -3349,13 +3358,82 @@ describe('ShapeRenderer', () => {
     `;
 
     const shapeNode = parseShapeNode(parseXml(xml));
-    const el = renderShape(shapeNode, createMockRenderContext());
+    const el = renderShape(shapeNode, createMockRenderContext({ textAutofit: 'bounded' }));
     const textContainer = Array.from(el.querySelectorAll('div')).find(
       (d) => (d as HTMLDivElement).style.flexDirection === 'column',
     ) as HTMLDivElement | undefined;
 
     expect(textContainer).toBeTruthy();
     expect(textContainer?.style.overflowY).toBe('hidden');
+  });
+
+  it('grows spAutoFit text past a stale stored height by default instead of shrinking it', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    // Stored extent is one line tall while the wrapped text needs several lines —
+    // the signature of a programmatically filled template. PowerPoint grows the
+    // shape on open; the default 'grow' mode must keep the font size and overflow
+    // downward, never scale the text down into the stale height.
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 514 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 13 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        return this.style.whiteSpace === 'nowrap' ? 2900 : 514;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!isFitContainer(this)) return 0;
+        return this.style.whiteSpace === 'nowrap' ? 13 : 57;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="301" name="txt_strategic_fit"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="3371850" y="3000000"/><a:ext cx="4957700" cy="132420"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr lIns="16933" tIns="16933" rIns="16933" bIns="16933"><a:spAutoFit/></a:bodyPr>
+            <a:lstStyle><a:lvl1pPr><a:defRPr sz="750"/></a:lvl1pPr></a:lstStyle>
+            <a:p><a:r><a:t>Strong regional presence and deep operator experience across finance, growth, profitability, acquisition integration, and strategic planning; a long single paragraph stuffed into a one-line-tall template box.</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('Strong regional presence') &&
+          div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowY).toBe('visible');
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
   });
 
   it('applies theme effectRef outer shadow when shape has no explicit effectLst', () => {

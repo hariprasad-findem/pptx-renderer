@@ -41,6 +41,12 @@ export interface ViewerOptions {
   lazySlides?: boolean;
   /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. Use `false` to disable. */
   pdfjs?: PdfjsConfig;
+  /**
+   * spAutoFit text handling. 'grow' (default) follows PowerPoint: text wraps at the
+   * shape width, keeps its font size, and overflows a stale stored shape height.
+   * 'bounded' keeps the legacy behavior of shrinking text into the stored bounds.
+   */
+  textAutofit?: 'grow' | 'bounded';
   onSlideChange?: (index: number) => void;
   onSlideRendered?: (index: number, element: HTMLElement) => void;
   onSlideError?: (index: number, error: unknown) => void;
@@ -483,6 +489,7 @@ export class PptxViewer extends EventTarget {
       mediaUrlCache: this.mediaUrlCache,
       pdfjs: this.viewerOptions.pdfjs,
       chartInstances: this.chartInstances,
+      textAutofit: this.viewerOptions.textAutofit,
     });
 
     if (scale !== undefined && scale !== 1) {
@@ -978,6 +985,7 @@ export class PptxViewer extends EventTarget {
         mediaUrlCache: this.mediaUrlCache,
         pdfjs: this.viewerOptions.pdfjs,
         chartInstances: this.chartInstances,
+        textAutofit: this.viewerOptions.textAutofit,
       });
 
       this.slideHandles.set(index, handle);
@@ -1208,6 +1216,7 @@ export class PptxViewer extends EventTarget {
         mediaUrlCache: this.mediaUrlCache,
         pdfjs: this.viewerOptions.pdfjs,
         chartInstances: this.chartInstances,
+        textAutofit: this.viewerOptions.textAutofit,
       });
       this.slideHandles.set(this.currentSlide, handle);
       handle.element.style.transform = `scale(${scale})`;

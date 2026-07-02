@@ -314,6 +314,25 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   }
 }
 
+/**
+ * Merge only the character defaults (defRPr) from a style level node.
+ *
+ * PowerPoint applies the master's otherStyle to non-placeholder text boxes only
+ * for character defaults (font size, bold, color, ...). Paragraph layout
+ * (algn, margins, spacing, bullets) for plain text boxes comes from the
+ * presentation defaultTextStyle instead — a master otherStyle carrying e.g.
+ * algn="r" must not right-shift text boxes on slides.
+ */
+function mergeCharacterDefaultsOnly(target: MergedParagraphStyle, pPr: SafeXmlNode): void {
+  if (!pPr.exists()) return;
+  const defRPr = pPr.child('defRPr');
+  if (defRPr.exists()) {
+    target.defRPr = defRPr;
+    target.defRPrs ??= [];
+    target.defRPrs.push(defRPr);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Run Style Resolution
 // ---------------------------------------------------------------------------
@@ -862,14 +881,21 @@ export function renderTextBody(
     // Level 2: master defaultTextStyle
     mergeParagraphProps(merged, findStyleAtLevel(ctx.master.defaultTextStyle, level));
 
-    // Level 3: master text styles by category
+    // Level 3: master text styles by category.
+    // Placeholders inherit the full master txStyles level. Plain text boxes take
+    // only character defaults (defRPr) from otherStyle — PowerPoint sources their
+    // paragraph layout (algn etc.) from presentation defaultTextStyle instead.
     const masterTextStyle =
       category === 'title'
         ? ctx.master.textStyles.titleStyle
         : category === 'body'
           ? ctx.master.textStyles.bodyStyle
           : ctx.master.textStyles.otherStyle;
-    mergeParagraphProps(merged, findStyleAtLevel(masterTextStyle, level));
+    if (placeholder) {
+      mergeParagraphProps(merged, findStyleAtLevel(masterTextStyle, level));
+    } else {
+      mergeCharacterDefaultsOnly(merged, findStyleAtLevel(masterTextStyle, level));
+    }
 
     // Level 4: master placeholder lstStyle
     if (placeholder) {
